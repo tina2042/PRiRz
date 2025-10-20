@@ -1,0 +1,34 @@
+#ifndef SEQUENTIAL_PROC_HPP
+#define SEQUENTIAL_PROC_HPP
+
+#include <opencv2/opencv.hpp>
+#include <vector>
+#include <iostream>
+
+/**
+ * @brief Oblicza histogram jasności dla obrazu w skali szarości.
+ * * Histogram to wektor zliczający liczbę pikseli dla każdego z 256 poziomów jasności.
+ * * @param image Obraz wejściowy (cv::Mat, oczekiwany CV_8UC1).
+ * @return std::vector<int> Histogram (256 elementów).
+ */
+std::vector<int> calculateHistogram(const cv::Mat& image);
+
+/**
+ * @brief Oblicza Skumulowaną Dystrybuantę (CDF) na podstawie histogramu.
+ * * CDF[i] jest sumą wszystkich wartości histogramu od indeksu 0 do i.
+ * * @param hist Wektor histogramu (256 elementów).
+ * @return std::vector<int> Skumulowana Dystrybuanta (256 elementów).
+ */
+std::vector<int> calculateCDF(const std::vector<int>& hist);
+
+/**
+ * @brief Stosuje transformację equalizacji kontrastu do obrazu w skali szarości.
+ * * Używa CDF do wygenerowania tablicy transformacji (LUT) i mapuje piksele 
+ * stare na nowe wartości.
+ * * @param inputImage Obraz wejściowy w skali szarości.
+ * @param cdf Wektor Skumulowanej Dystrybuanty.
+ * @return cv::Mat Nowy obraz po equalizacji.
+ */
+cv::Mat applyEqualization(const cv::Mat& inputImage, const std::vector<int>& cdf);
+
+#endif // SEQUENTIAL_PROC_HPP

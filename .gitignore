@@ -1,0 +1,12 @@
+# Pliki wykonywalne (binarne)
+main
+*.o
+
+# Pliki systemowe i VS Code
+.vscode/
+
+# Katalogi z danymi wyjściowymi (zmieniane podczas działania programu)
+data/output/
+
+# Katalogi budowania (jeśli używasz CMake)
+build/
