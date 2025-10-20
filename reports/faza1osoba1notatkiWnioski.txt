@@ -1,0 +1,67 @@
+--- 1. Sekwencyjny Proces (Grayscale) ---
+Sredni czas wykonania (10 runow): 1 ms
+Zapisano do: data/output/SEQ_GRAY_20251020_212353.png
+
+--- 2. Proces OpenMP (Grayscale) ---
+Sredni czas wykonania (10 runow): 7 ms
+Zapisano do: data/output/OMP_GRAY_20251020_212353.png
+
+--- 3. Proces OpenMP (Color) ---
+Sredni czas wykonania (10 runow): 14 ms
+Zapisano do: data/output/OMP_COLOR_20251020_212353.png
+
+W projekcie programowania równoległego celem było przyspieszenie obliczeń. 
+Fakt, że OpenMP jest wolniejsze (2 ms) niż wersja sekwencyjna (1 ms), jest klasycznym przykładem narzutu (overhead) związanego z równoległością:
+Tworzenie Wątków: Czas potrzebny na utworzenie i synchronizację puli wątków (#pragma omp parallel) jest dłuższy niż czas potrzebny na wykonanie samego zadania (obliczenie histogramu).
+
+Redukcja: Czas potrzebny na sumowanie lokalnych histogramów (redukcję) przewyższa czas zaoszczędzony na równoległym zliczaniu.
+
+Wniosek: Dla tak krótkiego czasu wykonania (1 ms) zadanie nie jest wystarczająco duże, aby zrekompensować koszt uruchomienia równoległości.
+
+Obraz "Lena" w standardowym rozmiarze $512 \times 512$ pikseli ma $262,144$ piksele. Przetworzenie takiej liczby pikseli przez funkcję sekwencyjną (ładowanie, obliczanie histogramu, CDF, transformacja i zapis) w 1 ms jest możliwe tylko na bardzo nowoczesnych procesorach i dla bardzo prostej logiki (lub jeśli system pomiarowy jest niedokładny).
+Zalecenie: Aby sensownie mierzyć wydajność, należy użyć większych obrazów (np. $4096 \times 4096$ pikseli lub większych), aby czas sekwencyjny wynosił co najmniej 100 ms – 1000 ms (1 sekundę). To pozwoli narzutowi OpenMP stać się marginalnym w porównaniu do czasu obliczeń.
+
+funkcja equalize_OMP_Color musi:
+
+Załadować obraz (cv::imread(argv[1], cv::IMREAD_COLOR)).
+
+Podzielić go na 3 identyczne kanały (lub przeczytać 3 identyczne kanały z pliku, jeśli jest to BMP).
+
+Wykonać 3x obliczenie histogramu i equalizację.
+
+Wzrost czasu z 2 ms na 20 ms jest prawdopodobnie związany z:
+
+Większym narzutem na zarządzanie i przetwarzanie trzech struktur danych (3 kanały).
+
+Dodatkowym narzutem czasowym na funkcje cv::split i cv::merge wewnątrz pomiaru.
+
+Wniosek do raportu: Wersja OpenMP Grayscale jest optymalna. Wersja OpenMP Color jest znacznie wolniejsza ze względu na konieczność przetwarzania potrojonej ilości danych (trzy kanały) i dodatkowe operacje związane z rozdzielaniem i łączeniem kanałów.
+
+Dla obrazu airplane8k.tif (8688 x 5792)
+./main data/input/airplane8k.tif
+
+--- 1. Sekwencyjny Proces (Grayscale) ---
+Sredni czas wykonania (10 runow): 304 ms
+Zapisano do: data/output/SEQ_GRAY_20251020_212315.png
+
+--- 2. Proces OpenMP (Grayscale) ---
+Sredni czas wykonania (10 runow): 199 ms
+Zapisano do: data/output/OMP_GRAY_20251020_212318.png
+
+--- 3. Proces OpenMP (Color) ---
+Sredni czas wykonania (10 runow): 1856 ms
+Zapisano do: data/output/OMP_COLOR_20251020_212337.png
+
+Obliczone wskaźniki przyspieszenia (Speedup) i wydajności (Efficiency) pokazują, że implementacja OpenMP działa zgodnie z oczekiwaniami dla algorytmów z częściowo sekwencyjnymi krokami (Prawo Amdahla).
+Średni Czas sekwencyjny 304 ms, openMP greyscale 199 ms, Różnica 105ms
+Speedup 1.53x -> Osiągnięto Przyspieszenie
+Sukces Optymalizacji: Uzyskanie $1.53x$ przyspieszenia jest dowodem na to, że równoległe zliczanie histogramu za pomocą lokalnych histogramów i redukcji OpenMP jest efektywne i przewyższa narzut (overhead) wynikający z tworzenia wątków i synchronizacji.
+Prawo Amdahla: Wartość $1.53x$ (zamiast np. $3x$ na procesorze 4-rdzeniowym) jest typowa dla tego algorytmu. Etapy obliczania Skumulowanej Dystrybuanty (CDF), generowania Tablicy LUT oraz I/O (załadunek/zapis) pozostają sekwencyjne (frakcja sekwencyjna $\alpha$). Ta frakcja $\alpha$ ogranicza maksymalny możliwy speedup.
+Wersja Kolorowa (Trzy Kanały)
+Sredni czas: OPM Grayscale: 199ms, OMP Color: 1856ms, wzrost czasu o 9,3x
+współczynnik pracy: OMP greyscale: 1 x dane, OMP Color: 3 x dane, oczekiwany wzrost czasu = 3x
+Złożoność Danych: Wersja kolorowa przetwarza 3 niezależne kanały ($R, G, B$), co wymaga trzykrotnie więcej obliczeń na zliczanie histogramu. Oczekiwana wartość bazowa powinna wynosić $\approx 3 \times 199 \text{ ms} \approx 597 \text{ ms}$ (przy założeniu pełnej optymalizacji).
+Narzut Systemowy/OpenCV: Wynik $1856 \text{ ms}$ (prawie $1.9$ sekundy) jest znacznie wyższy niż 597 ms. Wynika to głównie z narzutu (overhead) związanego z:
+Operacjami OpenCV: Funkcje cv::split i cv::merge (używane do rozdzielenia i połączenia kanałów) są intensywne obliczeniowo i wykonywane sekwencyjnie.
+amięć: Zarządzanie pamięcią i synchronizacja dla trzech niezależnych struktur danych (histogramów) dla każdego z wątków zwiększa złożoność i czas wykonania.
+Wniosek do Raportu: W przypadku algorytmów na dużych danych (jak zliczanie histogramu), OpenMP jest efektywne w równoległej redukcji czasów obliczeniowych, ale jego zyski są ograniczone przez część sekwencyjną algorytmu oraz narzut I/O i zarządzania strukturami (jak w przypadku wersji kolorowej).
