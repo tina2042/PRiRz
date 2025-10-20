@@ -1,0 +1,28 @@
+Implementacja sekcyjnej wersji (bazowej) dla obrazu w skali szarości: załadowanie obrazu, obliczenie histogramu, 
+obliczenie skumulowanej dystrybuanty (CDF), zastosowanie transformacji (equalizacja).
+
+Robiąc na wsl uruchom polecenia:
+sudo apt install pkgconf
+sudo apt install g++
+sudo apt update
+sudo apt install libopencv-dev -y
+g++ -o main src/main.cpp src/sequential_proc.cpp     $(pkg-config --cflags --libs opencv4)
+to uruchomienia ./main data/input/nazwa_pliku.bmp ( ./main data/input/lena.bmp )
+
+Co Konkretnie Zawierają Pliki
+- sequential_proc.hpp
+    Zawartość: Deklaracje trzech funkcji: calculateHistogram, calculateCDF, i applyEqualization.
+    Cel: Działa jako interfejs. Informuje kompilator, jakie funkcje są dostępne w module sekwencyjnym, aby inne pliki (main.cpp) mogły ich używać.
+- sequential_proc.cpp
+    Zawartość: Implementacje (ciała) funkcji zadeklarowanych w .hpp.
+        1. calculateHistogram: Podwójna pętla $\text{for}$ iterująca po każdym pikselu i zwiększająca licznik w odpowiednim przedziale histogramu.
+        2. calculateCDF: Pojedyncza pętla $\text{for}$ sumująca składowe histogramu.
+        3. applyEqualization: Implementacja wzoru equalizacji, utworzenie tablicy $\text{LUT}$ (na podstawie $\text{CDF}$ i $\text{CDF}_{\min}$) i zastosowanie jej do obrazu.
+    Cel: Zawiera całą logikę obliczeniową sekwencyjnej wersji algorytmu.
+- main.cpp
+    Zawartość: Główna pętla programu.
+        1. Obsługa argumentów i ładowanie obrazu (cv::imread).
+        2. Sekwencyjne wywołanie funkcji: Histogram -> CDF -> Equalizacja.
+        3. Pomiar czasu wykonania (za pomocą std::chrono).
+        4. Zapisanie obrazu wynikowego (cv::imwrite).
+    Cel: Zarządza przepływem pracy i zbiera pierwszą metrykę wydajności (czas sekwencyjny).
