@@ -14,6 +14,8 @@
 
 #include "sequential_proc.hpp" 
 #include "parallel_omp.hpp"
+#include "parallel_cuda.cuh"
+
 
 // Liczba powtórzeń dla uśrednienia
 const int NUM_RUNS = 10;
@@ -210,6 +212,36 @@ int main(int argc, char** argv) {
     results_color.close();
 
    
+    // ===================================================================
+    // 4. Wersja CUDA (Grayscale)
+    // ===================================================================
+    std::cout << "\n--- 4. Proces CUDA (Grayscale) ---" << std::endl;
+
+    cv::Mat outputImageCUDA;
+
+    long long duration_cuda = measureAverageTime([&]() {
+        outputImageCUDA = equalize_CUDA_Grayscale(inputImageGray);
+        return outputImageCUDA;
+    });
+
+    // Zapis
+    std::string filename_cuda = generateUniqueFilename("CUDA_GRAY", OUTPUT_DIR);
+    cv::imwrite(filename_cuda, outputImageCUDA);
+
+    std::cout << "Średni czas wykonania (" << NUM_RUNS << " runów): "
+            << duration_cuda << " ms" << std::endl;
+    std::cout << "Zapisano do: " << filename_cuda << std::endl;
+
+    // Weryfikacja poprawności z wersją sekwencyjną
+    std::cout << "\n--- Weryfikacja wyników CUDA ---" << std::endl;
+    auto hist_cuda = calculateHistogram(outputImageCUDA);
+
+    int diff_cuda = 0;
+    for (int i = 0; i < 256; ++i)
+        diff_cuda += std::abs(hist_seq[i] - hist_cuda[i]);
+
+    std::cout << "Różnica histogramów SEQ vs CUDA: " << diff_cuda << std::endl;
+
 
     return 0;
 }
