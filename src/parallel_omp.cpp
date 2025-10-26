@@ -47,8 +47,10 @@ std::vector<int> calculateHistogram_OMP_Grayscale(const cv::Mat& image) {
         
     } // Koniec bloku równoległego. W tym miejscu wątki się synchronizują.
     
+    
     // 3. Redukcja (Sumowanie Lokalnych Histogramów do Globalnego)
     // Po zakończeniu pętli, wątek główny sumuje wyniki.
+    // REDUKCJA SEKWENCYJNA
     std::vector<int> global_hist(NUM_BINS, 0);
     for (int t = 0; t < num_threads; ++t) {
         for (int b = 0; b < NUM_BINS; ++b) {

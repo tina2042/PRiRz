@@ -6,6 +6,9 @@
 #include <sys/stat.h>
 #include <string>
 #include <functional>
+#include <omp.h>
+#include <fstream>
+
 
 #include <opencv2/opencv.hpp>
 
@@ -30,8 +33,11 @@ long long measureAverageTime(std::function<cv::Mat()> op) {
         op(); 
         auto end = std::chrono::high_resolution_clock::now();
         
-        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
-        total_duration += duration.count();
+        // auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+        // total_duration += duration.count();
+        auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+        total_duration += duration;
+
     }
     
     // Zwróć średnią
@@ -131,6 +137,18 @@ int main(int argc, char** argv) {
     std::cout << "Zapisano do: " << filename_omp_gray << std::endl;
 
 
+    std::cout << "\n--- Weryfikacja poprawności wyników OpenMP  - porównanie z wynikami sekwencyjnymi (dla grayscale) ---" << std::endl;
+    auto hist_seq = calculateHistogram(outputImageSeq);
+    auto hist_omp = calculateHistogram(outputImageOMPGray);
+
+    int diff = 0;
+    for (int i = 0; i < 256; ++i)
+        diff += std::abs(hist_seq[i] - hist_omp[i]);
+
+    std::cout << "Różnica histogramów: " << diff << std::endl;
+
+
+
     // ===================================================================
     // 3. Wersja OpenMP (Color)
     // ===================================================================
@@ -150,6 +168,47 @@ int main(int argc, char** argv) {
     std::cout << "Sredni czas wykonania (" << NUM_RUNS << " runow): " 
             << duration_omp_color << " ms" << std::endl;
     std::cout << "Zapisano do: " << filename_omp_color << std::endl;
+
+
+    std::cout << "\n--- Sprawdzenie skalowalności (Grayscale) ---" << std::endl;
+    std::ofstream results("scalability_results.csv");
+    results << "threads,time_ms\n";
+
+   
+    int max_threads = omp_get_max_threads();
+
+    for (int threads = 1; threads <= max_threads; threads *= 2) {
+        omp_set_num_threads(threads);
+
+        long long duration = measureAverageTime([&]() {
+            equalize_OMP_Grayscale(inputImageGray);
+            return cv::Mat();
+        });
+
+        results << threads << "," << duration << "\n";
+        std::cout << "Wątki: " << threads << " -> " << duration << " ms" << std::endl;
+    }
+
+    results.close();
+
+    std::cout << "\n--- Sprawdzenie skalowalności (Color) ---" << std::endl;
+    std::ofstream results_color("scalability_results_color.csv");
+    results_color << "threads,time_ms\n";
+
+    for (int threads = 1; threads <= max_threads; threads *= 2) {
+        omp_set_num_threads(threads);
+
+        long long duration = measureAverageTime([&]() {
+            equalize_OMP_Color(inputImageColor);
+            return cv::Mat();
+        });
+
+        results_color << threads << "," << duration << "\n";
+        std::cout << "Wątki: " << threads << " -> " << duration << " ms" << std::endl;
+    }
+
+    results_color.close();
+
    
 
     return 0;
