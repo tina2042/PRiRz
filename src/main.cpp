@@ -243,5 +243,39 @@ int main(int argc, char** argv) {
     std::cout << "Różnica histogramów SEQ vs CUDA: " << diff_cuda << std::endl;
 
 
+    // ===================================================================
+    // 5. Wersja CUDA (Color)
+    // ===================================================================
+    std::cout << "\n--- 5. Proces CUDA (Color) ---" << std::endl;
+
+    cv::Mat outputImageCUDAColor;
+
+    long long duration_cuda_color = measureAverageTime([&]() {
+        outputImageCUDAColor = equalize_CUDA_Color(inputImageColor);
+        return outputImageCUDAColor;
+    });
+
+    // Zapis
+    std::string filename_cuda_color = generateUniqueFilename("CUDA_COLOR", OUTPUT_DIR);
+    cv::imwrite(filename_cuda_color, outputImageCUDAColor);
+
+    std::cout << "Średni czas wykonania (" << NUM_RUNS << " runów): "
+            << duration_cuda_color << " ms" << std::endl;
+    std::cout << "Zapisano do: " << filename_cuda_color << std::endl;
+
+    // Weryfikacja poprawności z wersją OpenMP Color
+    std::cout << "\n--- Weryfikacja wyników CUDA (Color) ---" << std::endl;
+
+    auto hist_cuda_R = calculateHistogram(outputImageCUDAColor); // dla uproszczenia używamy tej samej funkcji na wszystkich kanałach lub osobnej dla R/G/B
+    auto hist_omp_color = calculateHistogram(outputImageOMPColor);
+
+    int diff_cuda_color = 0;
+    for (int i = 0; i < 256; ++i)
+        diff_cuda_color += std::abs(hist_omp_color[i] - hist_cuda_R[i]);
+
+    std::cout << "Różnica histogramów OMP Color vs CUDA Color: " << diff_cuda_color << std::endl;
+
+
+
     return 0;
 }
