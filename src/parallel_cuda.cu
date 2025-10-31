@@ -66,7 +66,7 @@ __global__ void histogramKernelColor(const uchar* image, int* histR, int* histG,
 }
 
 // Wrapper C++ wywołujący kernel kolorowy
-extern "C" void computeHistogramCUDAColor(const uchar* input, int* histR, int* histG, int* histB, int width, int height) {
+extern "C" void computeHistogramCUDAColor(const uchar* input, int* histR, int* histG, int* histB, int width, int height, int threadsPerBlock, int numBlocks) {
     int size = width * height;
 
     uchar* d_image;
@@ -83,8 +83,6 @@ extern "C" void computeHistogramCUDAColor(const uchar* input, int* histR, int* h
 
     cudaMemcpy(d_image, input, size * 3 * sizeof(uchar), cudaMemcpyHostToDevice);
 
-    int threadsPerBlock = 256;
-    int numBlocks = (size + threadsPerBlock - 1) / threadsPerBlock;
     histogramKernelColor<<<numBlocks, threadsPerBlock>>>(d_image, d_histR, d_histG, d_histB, size);
     cudaDeviceSynchronize();
 
@@ -99,13 +97,15 @@ extern "C" void computeHistogramCUDAColor(const uchar* input, int* histR, int* h
 }
 
 // High-level CUDA equalization – kolor
-cv::Mat equalize_CUDA_Color(const cv::Mat& inputImage) {
+cv::Mat equalize_CUDA_Color(const cv::Mat& inputImage, int threadsPerBlock) {
     int width = inputImage.cols;
     int height = inputImage.rows;
 
     int histogramR[256] = {0}, histogramG[256] = {0}, histogramB[256] = {0};
 
-    computeHistogramCUDAColor(inputImage.data, histogramR, histogramG, histogramB, width, height);
+    int numBlocks = (width * height + threadsPerBlock - 1) / threadsPerBlock;
+
+    computeHistogramCUDAColor(inputImage.data, histogramR, histogramG, histogramB, width, height, threadsPerBlock, numBlocks);
 
     // --- obliczenie CDF dla każdego kanału ---
     std::vector<int> cdfR(256), cdfG(256), cdfB(256);
@@ -144,7 +144,7 @@ cv::Mat equalize_CUDA_Color(const cv::Mat& inputImage) {
 
 
 // Wrapper C++ wywołujący kernel CUDA
-extern "C" void computeHistogramCUDA(const unsigned char* input, int* histogram, int width, int height) {
+extern "C" void computeHistogramCUDA(const unsigned char* input, int* histogram, int width, int height, int threadsPerBlock, int numBlocks) {
     int size = width * height;
     
     unsigned char* d_image;
@@ -160,10 +160,6 @@ extern "C" void computeHistogramCUDA(const unsigned char* input, int* histogram,
     // Kopiowanie obrazu do GPU
     cudaMemcpy(d_image, input, size * sizeof(unsigned char), cudaMemcpyHostToDevice);
 
-    // Uruchomienie kernela
-    int threadsPerBlock = 256;
-    int numBlocks = (size + threadsPerBlock - 1) / threadsPerBlock;
-
     histogramKernel<<<numBlocks, threadsPerBlock>>>(d_image, d_hist, size);
     cudaDeviceSynchronize();
 
@@ -175,13 +171,14 @@ extern "C" void computeHistogramCUDA(const unsigned char* input, int* histogram,
     cudaFree(d_hist);
 }
 
-cv::Mat equalize_CUDA_Grayscale(const cv::Mat& inputImage) {
+cv::Mat equalize_CUDA_Grayscale(const cv::Mat& inputImage, int threadsPerBlock) {
     int width = inputImage.cols;
     int height = inputImage.rows;
 
     // 1️⃣ Oblicz histogram na GPU
     int histogram[256] = {0};
-    computeHistogramCUDA(inputImage.data, histogram, width, height);
+    int numBlocks = (width * height + threadsPerBlock - 1) / threadsPerBlock;
+    computeHistogramCUDA(inputImage.data, histogram, width, height, threadsPerBlock, numBlocks);
 
     // 2️⃣ Oblicz CDF na CPU
     std::vector<int> cdf(256, 0);

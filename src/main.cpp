@@ -8,6 +8,7 @@
 #include <functional>
 #include <omp.h>
 #include <fstream>
+#include <cuda_runtime.h>
 
 
 #include <opencv2/opencv.hpp>
@@ -68,6 +69,32 @@ std::string generateUniqueFilename(const std::string& prefix, const std::string&
     return outputDir + filename_ss.str();
 }
 
+
+/**
+ * @brief Zwraca listę bezpiecznych liczby wątków na blok dla obecnej karty CUDA.
+ *        Typowe wartości to wielokrotności 32 (warp size), nie większe niż maxThreadsPerBlock.
+ * @return std::vector<int> Lista możliwych threadsPerBlock
+ */
+std::vector<int> getSafeThreadCounts() {
+    int device;
+    cudaGetDevice(&device);
+
+    cudaDeviceProp prop;
+    cudaGetDeviceProperties(&prop, device);
+
+    int maxThreads = prop.maxThreadsPerBlock;
+    int warpSize  = prop.warpSize; // zwykle 32
+
+    std::vector<int> safeCounts;
+
+    // Generujemy wielokrotności warpSize do maxThreads
+    for (int t = warpSize; t <= maxThreads; t += warpSize) {
+        safeCounts.push_back(t);
+    }
+
+    return safeCounts;
+}
+
 int main(int argc, char** argv) {
     if (argc != 2) {
         std::cerr << "Uzycie: " << argv[0] << " <sciezka_do_obrazu>" << std::endl;
@@ -116,6 +143,42 @@ int main(int argc, char** argv) {
     std::cout << "Sredni czas wykonania (" << NUM_RUNS << " runow): " 
             << duration_seq << " ms" << std::endl;
     std::cout << "Zapisano do: " << filename_seq << std::endl;
+
+
+    // ===================================================================
+// 1b. Wersja Sekwencyjna (Color)
+// ===================================================================
+std::cout << "\n--- 1b. Sekwencyjny Proces (Color) ---" << std::endl;
+
+cv::Mat outputImageSeqColor;
+
+long long duration_seq_color = measureAverageTime([&]() {
+    // Oblicz histogramy kolorów
+    auto hist_seq_color = calculateColorHistogram(inputImageColor);
+
+    // Oblicz CDF dla każdego kanału
+    std::vector<std::vector<int>> cdf_seq_color(3);
+    for (int c = 0; c < 3; ++c)
+        cdf_seq_color[c] = calculateCDF(hist_seq_color[c]);
+
+    // Equalizacja dla każdego kanału
+    cv::Mat channels[3];
+    cv::split(inputImageColor, channels);
+    for (int c = 0; c < 3; ++c)
+        channels[c] = applyEqualization(channels[c], cdf_seq_color[c]);
+    cv::merge(channels, 3, outputImageSeqColor);
+
+    return outputImageSeqColor;
+});
+
+// Zapis
+std::string filename_seq_color = generateUniqueFilename("SEQ_COLOR", OUTPUT_DIR);
+cv::imwrite(filename_seq_color, outputImageSeqColor);
+
+std::cout << "Sredni czas wykonania (" << NUM_RUNS << " runow): "
+          << duration_seq_color << " ms" << std::endl;
+std::cout << "Zapisano do: " << filename_seq_color << std::endl;
+
 
 
     // ===================================================================
@@ -172,7 +235,7 @@ int main(int argc, char** argv) {
     std::cout << "Zapisano do: " << filename_omp_color << std::endl;
 
 
-    std::cout << "\n--- Sprawdzenie skalowalności (Grayscale) ---" << std::endl;
+    std::cout << "\n--- Sprawdzenie skalowalności OMP (Grayscale) ---" << std::endl;
     std::ofstream results("scalability_results.csv");
     results << "threads,time_ms\n";
 
@@ -193,7 +256,7 @@ int main(int argc, char** argv) {
 
     results.close();
 
-    std::cout << "\n--- Sprawdzenie skalowalności (Color) ---" << std::endl;
+    std::cout << "\n--- Sprawdzenie skalowalności OMP (Color) ---" << std::endl;
     std::ofstream results_color("scalability_results_color.csv");
     results_color << "threads,time_ms\n";
 
@@ -220,7 +283,7 @@ int main(int argc, char** argv) {
     cv::Mat outputImageCUDA;
 
     long long duration_cuda = measureAverageTime([&]() {
-        outputImageCUDA = equalize_CUDA_Grayscale(inputImageGray);
+        outputImageCUDA = equalize_CUDA_Grayscale(inputImageGray, 256);
         return outputImageCUDA;
     });
 
@@ -251,7 +314,7 @@ int main(int argc, char** argv) {
     cv::Mat outputImageCUDAColor;
 
     long long duration_cuda_color = measureAverageTime([&]() {
-        outputImageCUDAColor = equalize_CUDA_Color(inputImageColor);
+        outputImageCUDAColor = equalize_CUDA_Color(inputImageColor, 256);
         return outputImageCUDAColor;
     });
 
@@ -263,19 +326,109 @@ int main(int argc, char** argv) {
             << duration_cuda_color << " ms" << std::endl;
     std::cout << "Zapisano do: " << filename_cuda_color << std::endl;
 
-    // Weryfikacja poprawności z wersją OpenMP Color
+    // ===================================================================
+    // Weryfikacja wyników kolorowych (SEQ vs OMP Color)
+    // ===================================================================
+    std::cout << "\n--- Weryfikacja poprawności wyników (Color) ---" << std::endl;
+
+    // Oblicz histogramy dla SEQ Color
+    auto hist_seq_color = calculateColorHistogram(outputImageSeqColor);
+    // Oblicz histogramy dla OMP Color
+    auto hist_omp_color = calculateColorHistogram(outputImageOMPColor);
+
+    int total_diff_omp = 0;
+    // Porównujemy każdy kanał B, G, R
+    for (int c = 0; c < 3; ++c) {
+        int diff_channel = 0;
+        for (int i = 0; i < 256; ++i)
+            diff_channel += std::abs(hist_seq_color[c][i] - hist_omp_color[c][i]);
+        total_diff_omp += diff_channel;
+        std::string channel_name = (c == 0 ? "B" : (c == 1 ? "G" : "R"));
+        std::cout << "Różnica histogramów kanału " << channel_name 
+                << " SEQ vs OMP: " << diff_channel << std::endl;
+    }
+
+    std::cout << std::endl;
+
+    std::cout << "Łączna różnica histogramów (B+G+R) SEQ vs OMP: " 
+    << total_diff_omp << std::endl;
+    std::cout << std::endl;
+
+    // ===================================================================
+    // Weryfikacja wyników kolorowych (SEQ vs CUDA Color)
+    // ===================================================================
+    auto hist_cuda_color = calculateColorHistogram(outputImageCUDAColor);
+
+    int total_diff_cuda = 0;
+    for (int c = 0; c < 3; ++c) {
+        int diff_channel = 0;
+        for (int i = 0; i < 256; ++i)
+        diff_channel += std::abs(hist_seq_color[c][i] - hist_cuda_color[c][i]);
+    total_diff_cuda += diff_channel;
+    std::string channel_name = (c == 0 ? "B" : (c == 1 ? "G" : "R"));
+    std::cout << "Różnica histogramów kanału " << channel_name 
+    << " SEQ vs CUDA: " << diff_channel << std::endl;
+    }
+    std::cout << std::endl;
+
+    std::cout << "Łączna różnica histogramów (B+G+R) SEQ vs CUDA: " 
+            << total_diff_cuda << std::endl;
+
+
+
+    // ===================================================================
+    // Weryfikacja wyników kolorowych (OMP vs CUDA Color)
+    // ===================================================================
     std::cout << "\n--- Weryfikacja wyników CUDA (Color) ---" << std::endl;
 
     auto hist_cuda_R = calculateHistogram(outputImageCUDAColor); // dla uproszczenia używamy tej samej funkcji na wszystkich kanałach lub osobnej dla R/G/B
-    auto hist_omp_color = calculateHistogram(outputImageOMPColor);
+    auto hist_omp_color1 = calculateHistogram(outputImageOMPColor);
 
     int diff_cuda_color = 0;
     for (int i = 0; i < 256; ++i)
-        diff_cuda_color += std::abs(hist_omp_color[i] - hist_cuda_R[i]);
+        diff_cuda_color += std::abs(hist_omp_color1[i] - hist_cuda_R[i]);
 
     std::cout << "Różnica histogramów OMP Color vs CUDA Color: " << diff_cuda_color << std::endl;
 
 
+    std::cout << "\n--- Sprawdzenie skalowalności CUDA (Grayscale) ---" << std::endl;
+    std::ofstream results_cuda_gray("scalability_results_cuda_gray.csv");
+    results_cuda_gray << "threadsPerBlock,time_ms\n";
+
+    std::vector<int> threadOptions = {64, 128, 256, 512, 1024};
+
+    for (int threads : threadOptions) {
+        long long duration = measureAverageTime([&]() {
+            // Ustawienie liczby wątków w kernelu jest w środku computeHistogramCUDA
+            // Możemy dodać opcję przekazania threadsPerBlock do kernela, jeśli potrzebne
+            equalize_CUDA_Grayscale(inputImageGray, threads);
+            return cv::Mat();
+        });
+
+        results_cuda_gray << threads << "," << duration << "\n";
+        std::cout << "ThreadsPerBlock: " << threads << " -> " << duration << " ms" << std::endl;
+    }
+
+    results_cuda_gray.close();
+
+    std::cout << "\n--- Sprawdzenie skalowalności CUDA (Color) ---" << std::endl;
+    std::ofstream results_cuda_color("scalability_results_cuda_color.csv");
+    results_cuda_color << "threadsPerBlock,time_ms\n";
+
+    for (int threads : threadOptions) {
+        long long duration = measureAverageTime([&]() {
+            equalize_CUDA_Color(inputImageColor, threads);
+            return cv::Mat();
+        });
+
+        results_cuda_color << threads << "," << duration << "\n";
+        std::cout << "ThreadsPerBlock: " << threads << " -> " << duration << " ms" << std::endl;
+    }
+
+    results_cuda_color.close();
+
 
     return 0;
 }
+
+
