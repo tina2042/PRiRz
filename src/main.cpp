@@ -291,7 +291,7 @@ std::cout << "Zapisano do: " << filename_seq_color << std::endl;
     std::string filename_cuda = generateUniqueFilename("CUDA_GRAY", OUTPUT_DIR);
     cv::imwrite(filename_cuda, outputImageCUDA);
 
-    std::cout << "Średni czas wykonania (" << NUM_RUNS << " runów): "
+    std::cout << "Sredni czas wykonania (" << NUM_RUNS << " runów): "
             << duration_cuda << " ms" << std::endl;
     std::cout << "Zapisano do: " << filename_cuda << std::endl;
 
@@ -322,7 +322,7 @@ std::cout << "Zapisano do: " << filename_seq_color << std::endl;
     std::string filename_cuda_color = generateUniqueFilename("CUDA_COLOR", OUTPUT_DIR);
     cv::imwrite(filename_cuda_color, outputImageCUDAColor);
 
-    std::cout << "Średni czas wykonania (" << NUM_RUNS << " runów): "
+    std::cout << "Sredni czas wykonania (" << NUM_RUNS << " runów): "
             << duration_cuda_color << " ms" << std::endl;
     std::cout << "Zapisano do: " << filename_cuda_color << std::endl;
 
