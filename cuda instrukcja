@@ -1,0 +1,26 @@
+w terminalu:
+
+nvcc --version
+
+jeśli pokaże wersje git, jeśli nie, to:
+
+sudo apt install nvidia-cuda-toolkit
+
+jeszcze można sprawdzić kartę:
+nvidia-smi
+
+i czy są wersje opencv (ale to chyba już powinnaś mieć):
+pkg-config --modversion opencv4
+
+jak ich nie ma to:
+sudo apt install libopencv-dev
+
+do kompilacji użyj skryptu bash przez wywołanie:
+./build.sh
+
+i powinno się skompilować do hist_eq
+
+potem uruchamiasz w jeden z 2 sposobów:
+
+1. ./hist_eq <ścieżka do obrazu>
+2. uruchamiasz skrypt pythona interface_script.py

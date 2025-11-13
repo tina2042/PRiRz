@@ -131,6 +131,10 @@ def update_verification_table(output_text_content):
                 comparisons.append(("SEQ vs CUDA (Color)", diff))
             elif "OMP Color vs CUDA Color" in line:
                 comparisons.append(("OMP vs CUDA (Color)", diff))
+            elif "SEQ Color vs CUDA Color" in line:
+                comparisons.append(("SEQ vs CUDA (Color)", diff))
+            elif "SEQ Color vs OMP Color" in line:
+                comparisons.append(("SEQ vs OMP (Color)", diff))
             elif "Łączna różnica histogramów" in line:
                 # Łączna różnica (dla B+G+R)
                 if "SEQ vs OMP" in line:

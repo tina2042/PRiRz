@@ -350,7 +350,7 @@ std::cout << "Zapisano do: " << filename_seq_color << std::endl;
 
     std::cout << std::endl;
 
-    std::cout << "Łączna różnica histogramów (B+G+R) SEQ vs OMP: " 
+    std::cout << "Różnica histogramów (B+G+R) SEQ Color vs OMP Color: " 
     << total_diff_omp << std::endl;
     std::cout << std::endl;
 
@@ -371,7 +371,7 @@ std::cout << "Zapisano do: " << filename_seq_color << std::endl;
     }
     std::cout << std::endl;
 
-    std::cout << "Łączna różnica histogramów (B+G+R) SEQ vs CUDA: " 
+    std::cout << "Różnica histogramów SEQ Color vs CUDA Color: " 
             << total_diff_cuda << std::endl;
 
 
