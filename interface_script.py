@@ -12,6 +12,7 @@ CPP_EXECUTABLE = os.path.join(SCRIPT_DIR, "hist_eq")  # zmień, jeśli plik ma i
 
 # --- Funkcja do uruchamiania programu C++ ---
 def run_cpp_program():
+    reset_interface()
     image_path = file_entry.get().strip()
     if not os.path.exists(image_path):
         messagebox.showerror("Błąd", "Nie znaleziono pliku obrazu.")
@@ -26,7 +27,16 @@ def run_cpp_program():
         output_text.delete("1.0", tk.END)
         output_text.insert(tk.END, f"Uruchamianie pomiarów dla:\n{image_path}\n\n")
 
-        result = subprocess.run([CPP_EXECUTABLE, image_path], capture_output=True, text=True)
+        selected_mode = measurement_mode.get()
+        mode_code = mode_map.get(selected_mode, "ALL")
+
+        result = subprocess.run(
+            [CPP_EXECUTABLE, image_path, mode_code],
+            capture_output=True,
+            text=True
+        )
+
+
         output_text.insert(tk.END, result.stdout)
 
         if result.returncode != 0:
@@ -69,34 +79,19 @@ def update_summary_table(output_text_content):
                 image_type = "Color" if "Color" in current_section else "Grayscale"
                 summary_table.insert("", "end", values=(method, image_type, f"{time_ms:.2f}"))
 
-    image_path = file_entry.get().strip()
-    if not os.path.exists(image_path):
-        messagebox.showerror("Błąd", "Nie znaleziono pliku obrazu.")
-        return
+def reset_interface():
+    # Wyczyść konsolę tekstową
+    output_text.delete("1.0", tk.END)
 
-    if not os.path.exists(CPP_EXECUTABLE):
-        messagebox.showerror("Błąd", f"Nie znaleziono pliku wykonywalnego:\n{CPP_EXECUTABLE}")
-        return
+    # Wyczyść tabele
+    for table in (summary_table, verification_table):
+        for item in table.get_children():
+            table.delete(item)
 
-    try:
-        run_button.config(state=tk.DISABLED)
-        output_text.delete("1.0", tk.END)
-        output_text.insert(tk.END, f"Uruchamianie pomiarów dla:\n{image_path}\n\n")
+    # Usuń stare przyciski wykresów skalowalności
+    for widget in right_frame.winfo_children():
+        widget.destroy()
 
-        result = subprocess.run([CPP_EXECUTABLE, image_path], capture_output=True, text=True)
-        output_text.insert(tk.END, result.stdout)
-
-        if result.returncode != 0:
-            messagebox.showerror("Błąd wykonania", result.stderr)
-        else:
-            output_text.insert(tk.END, "\n--- Pomiar zakończony ---\n")
-            load_scalability_buttons()
-            # show_summary_plot(result.stdout)
-
-    except Exception as e:
-        messagebox.showerror("Błąd", str(e))
-    finally:
-        run_button.config(state=tk.NORMAL)
 
 def update_verification_table(output_text_content):
     """
@@ -283,6 +278,36 @@ ttk.Button(file_frame, text="Przeglądaj...", command=choose_file).pack(side='le
 # --- Przycisk uruchomienia ---
 run_button = ttk.Button(left_frame, text="Uruchom pomiary", command=run_cpp_program)
 run_button.pack(pady=10)
+
+# --- Sekcja wyboru trybu pomiaru ---
+tk.Label(left_frame, text="Tryb pomiaru:", font=("Arial", 11, "bold")).pack(anchor='w', pady=(10, 0))
+
+measurement_mode = ttk.Combobox(left_frame, state="readonly", width=40)
+measurement_mode['values'] = [
+    "Wszystkie",
+    "Sekwencyjny",
+    "OpenMP",
+    "CUDA",
+    "Sekwencyjny + OpenMP",
+    "Sekwencyjny + CUDA",
+    "OpenMP + CUDA",
+    "Tylko skalowalność"
+]
+measurement_mode.current(0)  # domyślnie "Wszystkie"
+measurement_mode.pack(anchor='w', padx=5, pady=5)
+mode = measurement_mode.get()
+
+mode_map = {
+    "Wszystkie": "ALL",
+    "Sekwencyjny": "SEQ",
+    "OpenMP": "OMP",
+    "CUDA": "CUDA",
+    "Sekwencyjny + OpenMP": "SEQ_OMP",
+    "Sekwencyjny + CUDA": "SEQ_CUDA",
+    "OpenMP + CUDA": "OMP_CUDA",
+    "Tylko skalowalność": "SCALING"
+}
+
 
 # --- Sekcja podsumowania wyników ---
 tk.Label(left_frame, text="Podsumowanie wyników:", font=("Arial", 11, "bold")).pack(anchor='w', pady=(10, 0))
