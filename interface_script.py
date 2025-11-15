@@ -9,6 +9,9 @@ import matplotlib.pyplot as plt
 # --- Automatyczne określenie ścieżki do pliku wykonywalnego ---
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CPP_EXECUTABLE = os.path.join(SCRIPT_DIR, "hist_eq")  # zmień, jeśli plik ma inną nazwę
+MPI_EXECUTABLE = "mpirun"  # Nazwa narzędzia uruchamiającego MPI
+MPI_PROCS = 4 # Domyślna liczba procesów do uruchomienia (można dodać UI)
+MPI_RUNNER_EXECUTABLE = os.path.join(SCRIPT_DIR, "mpi_runner") # Plik dla MPI
 
 # --- Funkcja do uruchamiania programu C++ ---
 def run_cpp_program():
@@ -21,34 +24,101 @@ def run_cpp_program():
     if not os.path.exists(CPP_EXECUTABLE):
         messagebox.showerror("Błąd", f"Nie znaleziono pliku wykonywalnego:\n{CPP_EXECUTABLE}")
         return
+    
+    selected_mode = measurement_mode.get()
+    mode_code = mode_map.get(selected_mode, "ALL")
+    commands_to_run = []
+
+    if mode_code == "ALL":
+        # Tryb ALL: Uruchamiamy standardowe metody + MPI
+        commands_to_run.append((
+            [CPP_EXECUTABLE, image_path, mode_code], 
+            "Standardowe (SEQ/OMP/CUDA)", 
+            CPP_EXECUTABLE
+        ))
+        # Dla MPI używamy 'MPI_GRAY' jako argumentu, aby uruchomić pomiar czasu
+        commands_to_run.append((
+            [MPI_EXECUTABLE, "-np", str(MPI_PROCS), MPI_RUNNER_EXECUTABLE, image_path, "MPI_GRAY"], 
+            f"MPI ({MPI_PROCS} procesów)", 
+            MPI_RUNNER_EXECUTABLE
+        ))
+        # 3. MPI Color 
+        commands_to_run.append((
+            [MPI_EXECUTABLE, "-np", str(MPI_PROCS), MPI_RUNNER_EXECUTABLE, image_path, "MPI_COLOR"], 
+            f"MPI (Color, {MPI_PROCS} procesów)", 
+            MPI_RUNNER_EXECUTABLE
+        ))
+    elif mode_code in ["MPI_GRAY","MPI_COLOR", "MPI_SCALING"]:
+        # Tryb tylko MPI
+        commands_to_run.append((
+            [MPI_EXECUTABLE, "-np", str(MPI_PROCS), MPI_RUNNER_EXECUTABLE, image_path, mode_code], 
+            f"MPI ({MPI_PROCS} procesów)", 
+            MPI_RUNNER_EXECUTABLE
+        ))
+    else:
+        # Inne tryby (SEQ, OMP, CUDA, SCALING)
+        commands_to_run.append((
+            [CPP_EXECUTABLE, image_path, mode_code], 
+            selected_mode, 
+            CPP_EXECUTABLE
+        ))
 
     try:
         run_button.config(state=tk.DISABLED)
         output_text.delete("1.0", tk.END)
         output_text.insert(tk.END, f"Uruchamianie pomiarów dla:\n{image_path}\n\n")
 
-        selected_mode = measurement_mode.get()
-        mode_code = mode_map.get(selected_mode, "ALL")
+        full_output = ""
+        any_error = False
 
-        result = subprocess.run(
-            [CPP_EXECUTABLE, image_path, mode_code],
-            capture_output=True,
-            text=True
-        )
+        for command, description, check_path in commands_to_run:
+            
+            # 1. Sprawdzenie, czy plik wykonywalny istnieje
+            if not os.path.exists(check_path) and check_path not in ["mpirun"]:
+                msg = f"Nie znaleziono pliku wykonywalnego dla {description}:\n{check_path}. Pomijam ten test."
+                messagebox.showwarning("Ostrzeżenie/Błąd", msg)
+                full_output += f"\n--- {description} - POMINIĘTO (Brak pliku wykonywalnego: {check_path}) ---\n"
+                any_error = True
+                continue
+                
+            output_text.insert(tk.END, f"--- Uruchamiam: {description} ---\n")
+            output_text.insert(tk.END, f"Komenda: {' '.join(command)}\n")
 
+            # 2. Wykonanie komendy
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True
+            )
+            
+            full_output += result.stdout
+            
+            # 3. Obsługa błędów
+            if result.returncode != 0:
+                error_message = result.stderr if result.stderr else f"Nieznany błąd wykonania dla {description}."
+                full_output += f"\n[BŁĄD WYKONANIA DLA {description.upper()}]:\n{error_message}\n"
+                messagebox.showwarning(f"Błąd wykonania ({description})", error_message)
+                any_error = True
+            
+            output_text.insert(tk.END, result.stdout)
+            output_text.see(tk.END) # Przewiń do końca po wypisaniu wyników
 
-        output_text.insert(tk.END, result.stdout)
-
-        if result.returncode != 0:
-            messagebox.showerror("Błąd wykonania", result.stderr)
+        # --- Przetwarzanie zbiorczych wyników ---
+        
+        if not any_error:
+            output_text.insert(tk.END, "\n--- Pomiar zakończony pomyślnie ---\n")
         else:
-            output_text.insert(tk.END, "\n--- Pomiar zakończony ---\n")
-            load_scalability_buttons()
-            show_summary_plot(result.stdout)
-            update_summary_table(result.stdout)  # ⬅️ NOWE: aktualizacja podsumowania
-            update_verification_table(result.stdout)
+            output_text.insert(tk.END, "\n--- Pomiar zakończony z błędami/ostrzeżeniami ---\n")
+
+        # Przetwarzanie wyników zawsze (nawet z błędami)
+        load_scalability_buttons()
+        show_summary_plot(full_output)
+        update_summary_table(full_output)
+        update_verification_table(full_output)
 
 
+    except FileNotFoundError as e:
+        messagebox.showerror("Błąd uruchomienia", f"Nie znaleziono narzędzia: {e.filename} (czy {MPI_EXECUTABLE} jest w PATH?)")
     except Exception as e:
         messagebox.showerror("Błąd", str(e))
     finally:
@@ -73,9 +143,16 @@ def update_summary_table(output_text_content):
                 current_section = match.group(1).strip()
             elif match.group(2) and current_section:
                 time_ms = float(match.group(2))
-                method = "Sekwencyjny" if "Sekwencyjny" in current_section else \
-                         "OpenMP" if "OpenMP" in current_section else \
-                         "CUDA" if "CUDA" in current_section else "?"
+                if "Sekwencyjny" in current_section:
+                    method = "Sekwencyjny"
+                elif "OpenMP" in current_section:
+                    method = "OpenMP"
+                elif "CUDA" in current_section:
+                    method = "CUDA"
+                elif "MPI" in current_section:
+                    method = "MPI"
+                else:
+                    method = "?"
                 image_type = "Color" if "Color" in current_section else "Grayscale"
                 summary_table.insert("", "end", values=(method, image_type, f"{time_ms:.2f}"))
 
@@ -241,8 +318,20 @@ def show_summary_plot(output_text_content):
         return
 
     # Wykres słupkowy
+    def get_color(section):
+        if "Sekwencyjny" in section:
+            return '#6A5ACD'  # Fioletowy
+        elif "OpenMP" in section:
+            return '#32CD32'  # Zielony
+        elif "CUDA" in section:
+            return '#FF6347'  # Pomarańczowy/Czerwony
+        elif "MPI" in section:
+            return '#00BFFF'  # Niebieski
+        return '#808080'  # Szary (domyślny)
+
+    colors = [get_color(s) for s in sections]
+
     fig, ax = plt.subplots(figsize=(8, 5))
-    colors = ['#6A5ACD' if "Sekwencyjny" in s else '#32CD32' if "OpenMP" in s else '#FF6347' for s in sections]
     ax.barh(sections, times, color=colors)
     ax.set_xlabel("Średni czas wykonania [ms]")
     ax.set_title("Porównanie metod equalizacji histogramu")
@@ -291,7 +380,10 @@ measurement_mode['values'] = [
     "Sekwencyjny + OpenMP",
     "Sekwencyjny + CUDA",
     "OpenMP + CUDA",
-    "Tylko skalowalność"
+    "Tylko skalowalność",
+    "MPI (Grayscale)",  
+    "MPI (Color)",
+    "Skalowalność MPI"
 ]
 measurement_mode.current(0)  # domyślnie "Wszystkie"
 measurement_mode.pack(anchor='w', padx=5, pady=5)
@@ -305,7 +397,10 @@ mode_map = {
     "Sekwencyjny + OpenMP": "SEQ_OMP",
     "Sekwencyjny + CUDA": "SEQ_CUDA",
     "OpenMP + CUDA": "OMP_CUDA",
-    "Tylko skalowalność": "SCALING"
+    "Tylko skalowalność": "SCALING",
+    "MPI (Grayscale)": "MPI_GRAY",       
+    "MPI (Color)": "MPI_COLOR",
+    "Skalowalność MPI": "MPI_SCALING"
 }
 
 
