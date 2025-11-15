@@ -23,6 +23,28 @@ std::vector<int> calculateHistogram(const cv::Mat& image) {
     return hist;
 }
 
+
+// Zliczanie histogramu dla obrazów kolorowych (BGR)
+std::vector<std::vector<int>> calculateColorHistogram(const cv::Mat& image) {
+    std::vector<std::vector<int>> hist(3, std::vector<int>(256, 0)); // 3 kanały: B, G, R
+
+    if (image.channels() != 3) {
+        // Jeśli nie obraz kolorowy, zwróć puste histogramy
+        return hist;
+    }
+
+    for (int i = 0; i < image.rows; ++i) {
+        const cv::Vec3b* rowPtr = image.ptr<cv::Vec3b>(i);
+        for (int j = 0; j < image.cols; ++j) {
+            hist[0][rowPtr[j][0]]++; // B
+            hist[1][rowPtr[j][1]]++; // G
+            hist[2][rowPtr[j][2]]++; // R
+        }
+    }
+
+    return hist;
+}
+
 std::vector<int> calculateCDF(const std::vector<int>& hist) {
     std::vector<int> cdf(256);
     int cumulative = 0;
@@ -72,5 +94,25 @@ cv::Mat applyEqualization(const cv::Mat& inputImage, const std::vector<int>& cdf
         }
     }
     
+    return outputImage;
+}
+
+// Equalizacja każdego kanału kolorowego osobno
+cv::Mat applyColorEqualization(const cv::Mat& inputImage) {
+    if (inputImage.channels() != 3) {
+        return inputImage.clone(); // Nie kolorowy obraz – zwróć kopię
+    }
+
+    std::vector<cv::Mat> channels(3);
+    cv::split(inputImage, channels); // Rozdzielenie kanałów B,G,R
+
+    for (int c = 0; c < 3; ++c) {
+        std::vector<int> hist = calculateHistogram(channels[c]); // histogram kanału
+        std::vector<int> cdf = calculateCDF(hist);               // CDF kanału
+        channels[c] = applyEqualization(channels[c], cdf);       // equalizacja kanału
+    }
+
+    cv::Mat outputImage;
+    cv::merge(channels, outputImage); // Złączenie kanałów w obraz kolorowy
     return outputImage;
 }

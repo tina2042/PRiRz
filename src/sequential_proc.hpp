@@ -14,6 +14,14 @@
 std::vector<int> calculateHistogram(const cv::Mat& image);
 
 /**
+ * @brief Oblicza histogram dla obrazu kolorowego (BGR).
+ * Dla każdego kanału (B, G, R) generowany jest osobny histogram.
+ * @param image Obraz wejściowy (cv::Mat, oczekiwany CV_8UC3).
+ * @return std::vector<std::vector<int>> Wektor 3 histogramów po 256 elementów (kolejno B, G, R).
+ */
+std::vector<std::vector<int>> calculateColorHistogram(const cv::Mat& image);
+
+/**
  * @brief Oblicza Skumulowaną Dystrybuantę (CDF) na podstawie histogramu.
  * * CDF[i] jest sumą wszystkich wartości histogramu od indeksu 0 do i.
  * * @param hist Wektor histogramu (256 elementów).
@@ -30,5 +38,12 @@ std::vector<int> calculateCDF(const std::vector<int>& hist);
  * @return cv::Mat Nowy obraz po equalizacji.
  */
 cv::Mat applyEqualization(const cv::Mat& inputImage, const std::vector<int>& cdf);
+
+/**
+ * @brief Equalizuje kontrast dla każdego kanału obrazu kolorowego niezależnie.
+ * @param inputImage Obraz wejściowy (CV_8UC3).
+ * @return cv::Mat Obraz po equalizacji każdego kanału (B, G, R).
+ */
+cv::Mat applyColorEqualization(const cv::Mat& inputImage);
 
 #endif // SEQUENTIAL_PROC_HPP
