@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <mpi.h>
 #include <opencv2/opencv.hpp>
 #include <chrono>
@@ -7,7 +8,14 @@
 #include <iomanip>
 #include <sys/stat.h> 
 #include "parallel_mpi.hpp" 
-// Wymagane funkcje pomocnicze... (Zakładamy, że są zdefiniowane powyżej main lub w innym pliku)
+#include "sequential_proc.hpp"
+// Wymagane funkcje referencyjne z sequential_proc.cpp
+std::vector<int> calculateHistogram(const cv::Mat& image); 
+// Zakładamy, że color version wygląda tak:
+std::vector<std::vector<int>> calculateColorHistogram(const cv::Mat& image); 
+// Wymagane dla SEQ (wersji wzorcowej)
+cv::Mat equalize_SEQ_Grayscale(const cv::Mat& inputImage);
+cv::Mat equalize_SEQ_Color(const cv::Mat& inputImage);
 
 // Funkcja pomocnicza do tworzenia katalogu, jeśli nie istnieje
 void createDirectory(const std::string& path) {
@@ -107,12 +115,60 @@ int main(int argc, char** argv) {
     // 3. Zapis Wyniku (Tylko Proces 0)
     // ----------------------------------------------------------------------
     if (rank == 0) {
+        // --- 3A. Generowanie Wzorca Sekwencyjnego (dla weryfikacji) ---
+        cv::Mat outputImageSEQ_Reference;
+        std::string mode_label = "";
+        
+        // Generujemy wzorzec używając sekwencyjnej wersji (którą zakładamy za poprawną)
+        if (requested_mode == "MPI_COLOR") {
+            // Wersja kolorowa jest bardziej skomplikowana; dla prostoty używamy bezpośredniej funkcji sekwencyjnej
+            // Zakładamy, że masz zaimplementowaną funkcję applyColorEqualization (która wykonuje to wszystko sekwencyjnie)
+            outputImageSEQ_Reference = equalize_SEQ_Color(inputImage);
+            mode_label = "Color";
+        } else {
+            // Zakładamy, że masz zaimplementowaną funkcję applyEqualization
+            outputImageSEQ_Reference = equalize_SEQ_Grayscale(inputImage);
+            mode_label = "Gray";
+        }
+
+
+        // --- 3B. Obliczanie Różnicy Histogramów ---
+        int total_diff = 0;
+
+        if (mode_label == "Color") {
+            // Weryfikacja dla kolorów (B+G+R)
+            auto hist_mpi_color = calculateColorHistogram(outputImageMPI);
+            auto hist_seq_color = calculateColorHistogram(outputImageSEQ_Reference);
+
+            for (int c = 0; c < 3; ++c) {
+                int diff_channel = 0;
+                for (int i = 0; i < 256; ++i)
+                    diff_channel += std::abs(hist_seq_color[c][i] - hist_mpi_color[c][i]);
+                total_diff += diff_channel;
+            }
+            
+            // Wypisanie sumy różnic dla interfejsu Pythona
+            std::cout << "Różnica histogramów (B+G+R) SEQ Color vs MPI Color: " << total_diff << std::endl;
+        
+        } else {
+            // Weryfikacja dla skali szarości (Grayscale)
+            auto hist_mpi_gray = calculateHistogram(outputImageMPI);
+            auto hist_seq_gray = calculateHistogram(outputImageSEQ_Reference);
+
+            for (int i = 0; i < 256; ++i)
+                total_diff += std::abs(hist_seq_gray[i] - hist_mpi_gray[i]);
+            
+            // Wypisanie różnicy dla interfejsu Pythona
+            std::cout << "Różnica histogramów SEQ vs MPI: " << total_diff << std::endl;
+        }
+
         std::string filename_mpi = generateUniqueFilename(filename_prefix, OUTPUT_DIR);
         cv::imwrite(filename_mpi, outputImageMPI);
         
         // Wypisanie wyniku w formacie oczekiwanym przez Pythona
-        std::cout << "Sredni czas wykonania (MPI): " << duration_mpi << " ms" << std::endl;
         std::cout << "Zapisano do: " << filename_mpi << std::endl; 
+        std::cout << "Sredni czas wykonania (MPI): " << duration_mpi << " ms" << std::endl;
+        
     }
     
     MPI_Finalize();

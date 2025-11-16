@@ -46,4 +46,16 @@ cv::Mat applyEqualization(const cv::Mat& inputImage, const std::vector<int>& cdf
  */
 cv::Mat applyColorEqualization(const cv::Mat& inputImage);
 
+/**
+ * @brief PEŁNA sekwencyjna equalizacja (wzorzec). 
+ * Wykonuje: Histogram -> CDF -> Transformacja.
+ */
+cv::Mat equalize_SEQ_Grayscale(const cv::Mat& inputImage);
+
+/**
+ * @brief PEŁNA sekwencyjna equalizacja kolorów (wzorzec).
+ * Wykonuje: Histogramy_kolorów -> CDFs -> Transformacja_kolorów.
+ */
+cv::Mat equalize_SEQ_Color(const cv::Mat& inputImage);
+
 #endif // SEQUENTIAL_PROC_HPP

@@ -48,10 +48,15 @@ def run_cpp_program():
             f"MPI (Color, {MPI_PROCS} procesów)", 
             MPI_RUNNER_EXECUTABLE
         ))
-    elif mode_code in ["MPI_GRAY","MPI_COLOR", "MPI_SCALING"]:
-        # Tryb tylko MPI
+    elif mode_code == "MPI":
+        # Tryb tylko MPI Color i Grayscale
         commands_to_run.append((
-            [MPI_EXECUTABLE, "-np", str(MPI_PROCS), MPI_RUNNER_EXECUTABLE, image_path, mode_code], 
+            [MPI_EXECUTABLE, "-np", str(MPI_PROCS), MPI_RUNNER_EXECUTABLE, image_path, "MPI_GRAY"], 
+            f"MPI ({MPI_PROCS} procesów)", 
+            MPI_RUNNER_EXECUTABLE
+        ))
+        commands_to_run.append((
+            [MPI_EXECUTABLE, "-np", str(MPI_PROCS), MPI_RUNNER_EXECUTABLE, image_path, "MPI_COLOR"], 
             f"MPI ({MPI_PROCS} procesów)", 
             MPI_RUNNER_EXECUTABLE
         ))
@@ -103,6 +108,56 @@ def run_cpp_program():
             output_text.insert(tk.END, result.stdout)
             output_text.see(tk.END) # Przewiń do końca po wypisaniu wyników
 
+        # -----------------------------------------------------------
+        # ETAP 2: Uruchamianie skalowalności (SCALING)
+        # -----------------------------------------------------------
+        
+        if mode_code == "SCALING" or mode_code == "ALL":
+            
+            # --- Uruchomienie Skalowalności MPI (GRAY) ---
+            csv_gray = "scalability_results_mpi_gray.csv"
+            command_mpi_gray = [
+                "python3", os.path.join(SCRIPT_DIR, "src/mpi_scaling_runner.py"), 
+                image_path, "GRAY", csv_gray, str(MPI_PROCS)
+            ]
+            
+            # Wymuś usunięcie starego pliku CSV przed rozpoczęciem
+            if os.path.exists(csv_gray): os.remove(csv_gray)
+            
+            output_text.insert(tk.END, f"\n--- Uruchamianie skryptu SCALING MPI (Gray) ---\n")
+            output_text.insert(tk.END, f"Komenda: {' '.join(command_mpi_gray)}\n")
+            
+            result_mpi_gray = subprocess.run(command_mpi_gray, capture_output=True, text=True)
+            full_output += result_mpi_gray.stdout # Zbieramy wyniki
+            output_text.insert(tk.END, result_mpi_gray.stdout)
+            
+            if result_mpi_gray.returncode != 0:
+                any_error = True
+                full_output += f"\n[BŁĄD SKALOWALNOŚCI MPI GRAY]: {result_mpi_gray.stderr}\n"
+                messagebox.showwarning("Błąd skalowalności", result_mpi_gray.stderr)
+
+            
+            # --- Uruchomienie Skalowalności MPI (COLOR) ---
+            csv_color = "scalability_results_mpi_color.csv"
+            command_mpi_color = [
+                "python3", os.path.join(SCRIPT_DIR, "src/mpi_scaling_runner.py"), 
+                image_path, "COLOR", csv_color, str(MPI_PROCS)
+            ]
+            
+            if os.path.exists(csv_color): os.remove(csv_color)
+
+            output_text.insert(tk.END, f"\n--- Uruchamianie skryptu SCALING MPI (Color) ---\n")
+            output_text.insert(tk.END, f"Komenda: {' '.join(command_mpi_color)}\n")
+            
+            result_mpi_color = subprocess.run(command_mpi_color, capture_output=True, text=True)
+            full_output += result_mpi_color.stdout
+            output_text.insert(tk.END, result_mpi_color.stdout)
+            
+            if result_mpi_color.returncode != 0:
+                any_error = True
+                full_output += f"\n[BŁĄD SKALOWALNOŚCI MPI COLOR]: {result_mpi_color.stderr}\n"
+                messagebox.showwarning("Błąd skalowalności", result_mpi_color.stderr)
+
         # --- Przetwarzanie zbiorczych wyników ---
         
         if not any_error:
@@ -112,7 +167,9 @@ def run_cpp_program():
 
         # Przetwarzanie wyników zawsze (nawet z błędami)
         load_scalability_buttons()
-        show_summary_plot(full_output)
+        if mode_code not in ["SCALING", "MPI_SCALING"]:
+            show_summary_plot(full_output) # Wyświetlamy wykres podsumowujący
+
         update_summary_table(full_output)
         update_verification_table(full_output)
 
@@ -134,6 +191,8 @@ def update_summary_table(output_text_content):
 
     # szukamy sekcji i czasów
     pattern = re.compile(r"-+\s*(.*?)\s*-+|[ŚS]redni czas.*?:\s*([\d.]+)\s*ms", re.IGNORECASE)
+    # Wzorzec do wyodrębnienia liczby procesów z nagłówka MPI
+    mpi_proc_pattern = re.compile(r"MPI.*?(\d+)\s* proces(ow|y)", re.IGNORECASE)
 
     current_section = None
     for line in output_text_content.splitlines():
@@ -141,6 +200,8 @@ def update_summary_table(output_text_content):
         if match:
             if match.group(1):
                 current_section = match.group(1).strip()
+                if "SKALOWALNOŚĆ" in current_section:
+                    continue
             elif match.group(2) and current_section:
                 time_ms = float(match.group(2))
                 if "Sekwencyjny" in current_section:
@@ -151,9 +212,29 @@ def update_summary_table(output_text_content):
                     method = "CUDA"
                 elif "MPI" in current_section:
                     method = "MPI"
+                    # --- FILTROWANIE MPI ---
+                    proc_match = mpi_proc_pattern.search(current_section)
+                    
+                    if proc_match:
+                        num_procs = int(proc_match.group(1))
+                        
+                        # Dodajemy tylko, jeśli liczba procesów wynosi 4
+                        if num_procs != 4:
+                            continue  # Ignoruj ten wynik (N=1, 2, 8, itd.)
+                        
+                        # Normalizacja nazwy dla tabeli: "MPI (4 proc.)"
+                        image_type = "Color" if "Color" in current_section else "Grayscale"
+                        
+                        # W tym miejscu chcemy, żeby tabela pokazywała, że są to 4 procesy
+                        # Zmieniamy image_type na Color/Gray + liczba procesów
+                        image_type = f"{image_type} (4 proc.)"
+                    elif "SKALOWALNOŚĆ" in current_section:
+                        continue
                 else:
                     method = "?"
-                image_type = "Color" if "Color" in current_section else "Grayscale"
+
+                if method != "MPI":
+                    image_type = "Color" if "Color" in current_section else "Grayscale"
                 summary_table.insert("", "end", values=(method, image_type, f"{time_ms:.2f}"))
 
 def reset_interface():
@@ -192,8 +273,11 @@ def update_verification_table(output_text_content):
         if match:
             diff = int(match.group(1))
 
-            # dopasowanie typu porównania
-            if "SEQ vs CUDA" in line:
+            if "SEQ vs MPI" in line and "Color" not in line and "kanału" not in line:
+                comparisons.append(("SEQ vs MPI (Gray)", diff))
+            elif "SEQ Color vs MPI Color" in line:
+                comparisons.append(("SEQ vs MPI (Color)", diff))
+            elif "SEQ vs CUDA" in line:
                 comparisons.append(("SEQ vs CUDA (Gray)", diff))
             elif "SEQ vs OMP" in line and "Color" not in line:
                 comparisons.append(("SEQ vs OMP (Gray)", diff))
@@ -279,6 +363,8 @@ def load_scalability_buttons():
         ("OpenMP (Color)", "scalability_results_color.csv"),
         ("CUDA (Grayscale)", "scalability_results_cuda_gray.csv"),
         ("CUDA (Color)", "scalability_results_cuda_color.csv"),
+        ("MPI (Grayscale)", "scalability_results_mpi_gray.csv"),
+        ("MPI (Color)", "scalability_results_mpi_color.csv"), 
     ]
 
     for label, file in buttons:
@@ -299,23 +385,66 @@ def show_summary_plot(output_text_content):
     # "Sredni czas wykonania (10 runow): 123 ms"
     time_pattern = re.compile(r"-+\s*(.*?)\s*-+|[ŚS]redni czas.*?:\s*([\d.]+)\s*ms", re.IGNORECASE)
 
-
-    sections = []
-    times = []
     current_section = None
+    filtered_results = []
+    mpi_results = []
 
     for line in output_text_content.splitlines():
         match = time_pattern.search(line)
+        
         if match:
             if match.group(1):
-                # nagłówek sekcji np. "--- 1. Sekwencyjny Proces (Grayscale) ---"
                 current_section = match.group(1).strip()
+            
             elif match.group(2) and current_section:
-                times.append(float(match.group(2)))
-                sections.append(current_section)
+                time_ms = float(match.group(2))
+                section_name = current_section
+                
+                # --- FILTROWANIE I NORMALIZACJA ---
+                if "MPI" in section_name:
+                    is_scaling = "SKALOWALNOŚĆ MPI" in section_name
+                    proc_match = re.search(r"(\d+)\s* proces(ow|y)", section_name)
+                    
+                    if proc_match:
+                        num_procs = int(proc_match.group(1))
+                        
+                        # Zbieramy wszystkie czasy MPI, z ich liczbą procesów
+                        # Wypychamy je do oddzielnej listy do późniejszego wyboru
+                        if not is_scaling:
+                            # Normalizujemy etykietę: "MPI (Grayscale, 4 proc.)"
+                            if "Color" in section_name:
+                                label = f"MPI (Color, {num_procs} proc.)"
+                            else:
+                                label = f"MPI (Grayscale, {num_procs} proc.)"
+                            
+                            mpi_results.append({'label': label, 'time': time_ms, 'procs': num_procs})
+                else:
+                    # Czas z metody standardowej (SEQ, OMP, CUDA)
+                    filtered_results.append((section_name, time_ms))
 
-    if not times:
+    types_to_add = set()
+    
+    for result in mpi_results:
+        if result['procs'] == 4:
+            # Wyróżniamy typ (Gray/Color), aby dodać go tylko raz
+            type_key = "Color" if "Color" in result['label'] else "Grayscale"
+            
+            if type_key not in types_to_add:
+                # Dodajemy wynik 4-procesowy do finalnej listy
+                filtered_results.append((result['label'], result['time']))
+                types_to_add.add(type_key)
+                
+    # --- 3. Finalne przygotowanie danych ---
+    
+    final_sections = [s[0] for s in filtered_results]
+    final_times = [s[1] for s in filtered_results]
+
+    if not final_times:
         return
+    
+   # Usuwamy tylko etykiety "SKALOWALNOŚĆ" z osi Y (niezwiązane z MPI)
+    sections_to_plot = [s for s in final_sections if "SKALOWALNOŚĆ" not in s]
+    times_to_plot = [final_times[i] for i, s in enumerate(final_sections) if "SKALOWALNOŚĆ" not in s]
 
     # Wykres słupkowy
     def get_color(section):
@@ -329,12 +458,12 @@ def show_summary_plot(output_text_content):
             return '#00BFFF'  # Niebieski
         return '#808080'  # Szary (domyślny)
 
-    colors = [get_color(s) for s in sections]
+    colors = [get_color(s) for s in sections_to_plot]
 
     fig, ax = plt.subplots(figsize=(8, 5))
-    ax.barh(sections, times, color=colors)
+    ax.barh(sections_to_plot, times_to_plot, color=colors)
     ax.set_xlabel("Średni czas wykonania [ms]")
-    ax.set_title("Porównanie metod equalizacji histogramu")
+    ax.set_title("Porównanie metod equalizacji histogramu (MPI: 4 procesy)")
     plt.tight_layout()
     plt.show(block=False)
 
@@ -380,10 +509,8 @@ measurement_mode['values'] = [
     "Sekwencyjny + OpenMP",
     "Sekwencyjny + CUDA",
     "OpenMP + CUDA",
-    "Tylko skalowalność",
-    "MPI (Grayscale)",  
-    "MPI (Color)",
-    "Skalowalność MPI"
+    "MPI",
+    "Tylko skalowalność"
 ]
 measurement_mode.current(0)  # domyślnie "Wszystkie"
 measurement_mode.pack(anchor='w', padx=5, pady=5)
@@ -397,10 +524,8 @@ mode_map = {
     "Sekwencyjny + OpenMP": "SEQ_OMP",
     "Sekwencyjny + CUDA": "SEQ_CUDA",
     "OpenMP + CUDA": "OMP_CUDA",
-    "Tylko skalowalność": "SCALING",
-    "MPI (Grayscale)": "MPI_GRAY",       
-    "MPI (Color)": "MPI_COLOR",
-    "Skalowalność MPI": "MPI_SCALING"
+    "MPI": "MPI",      
+    "Tylko skalowalność": "SCALING", 
 }
 
 

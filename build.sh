@@ -49,13 +49,13 @@ if [ $? -ne 0 ]; then
     echo "BŁĄD: Kompilacja $OUTPUT_MPI nie powiodła się."
     exit 1
 fi
-echo "✅ $OUTPUT_MPI skompilowany pomyślnie."
+echo "$OUTPUT_MPI skompilowany pomyślnie."
 
 echo ""
-echo "✅ Kompilacja zakończona pomyślnie!"
+echo "Kompilacja zakończona pomyślnie!"
 echo "Komenda Uruchomienia (SEQ/OMP/CUDA):"
-echo "   ./$OUTPUT_SEQ_OMP_CUDA <ścieżka_do_obrazu> ALL"
+echo " ./$OUTPUT_SEQ_OMP_CUDA <ścieżka_do_obrazu> ALL"
 echo ""
 echo "Komenda Uruchomienia (MPI):"
-echo "   mpirun -np N ./$OUTPUT_MPI <ścieżka_do_obrazu> MPI_GRAY"
+echo " mpirun -np N ./$OUTPUT_MPI <ścieżka_do_obrazu> MPI_GRAY"
 echo "=============================================="

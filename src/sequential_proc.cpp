@@ -116,3 +116,17 @@ cv::Mat applyColorEqualization(const cv::Mat& inputImage) {
     cv::merge(channels, outputImage); // Złączenie kanałów w obraz kolorowy
     return outputImage;
 }
+
+cv::Mat equalize_SEQ_Grayscale(const cv::Mat& inputImage) {
+    // Wywołuje kroki sekwencyjne: Histogram -> CDF -> Apply
+    std::vector<int> hist = calculateHistogram(inputImage);
+    std::vector<int> cdf = calculateCDF(hist);
+    // Używamy oryginalnej funkcji applyEqualization, która wymaga CDF
+    return applyEqualization(inputImage, cdf); 
+}
+
+cv::Mat equalize_SEQ_Color(const cv::Mat& inputImage) {
+    // Wersja kolorowa już jest zaimplementowana jako applyColorEqualization
+    // Zmieniamy tylko nazwę, aby była spójna z nowym wzorcem
+    return applyColorEqualization(inputImage); 
+}
