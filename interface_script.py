@@ -27,43 +27,51 @@ def run_cpp_program():
     
     selected_mode = measurement_mode.get()
     mode_code = mode_map.get(selected_mode, "ALL")
+    try:
+        num_bins = int(bin_count.get())
+        if num_bins < 1 or num_bins > 256:
+            raise ValueError
+    except:
+        messagebox.showerror("Błąd", "Nieprawidłowa liczba przedziałów (wymagane 1-256).")
+        return
+    
     commands_to_run = []
 
     if mode_code == "ALL":
         # Tryb ALL: Uruchamiamy standardowe metody + MPI
         commands_to_run.append((
-            [CPP_EXECUTABLE, image_path, mode_code], 
+            [CPP_EXECUTABLE, image_path, mode_code, str(num_bins)], 
             "Standardowe (SEQ/OMP/CUDA)", 
             CPP_EXECUTABLE
         ))
         # Dla MPI używamy 'MPI_GRAY' jako argumentu, aby uruchomić pomiar czasu
         commands_to_run.append((
-            [MPI_EXECUTABLE, "-np", str(MPI_PROCS), MPI_RUNNER_EXECUTABLE, image_path, "MPI_GRAY"], 
+            [MPI_EXECUTABLE, "-np", str(MPI_PROCS), MPI_RUNNER_EXECUTABLE, image_path, "MPI_GRAY", str(num_bins)], 
             f"MPI ({MPI_PROCS} procesów)", 
             MPI_RUNNER_EXECUTABLE
         ))
         # 3. MPI Color 
         commands_to_run.append((
-            [MPI_EXECUTABLE, "-np", str(MPI_PROCS), MPI_RUNNER_EXECUTABLE, image_path, "MPI_COLOR"], 
+            [MPI_EXECUTABLE, "-np", str(MPI_PROCS), MPI_RUNNER_EXECUTABLE, image_path, "MPI_COLOR", str(num_bins)], 
             f"MPI (Color, {MPI_PROCS} procesów)", 
             MPI_RUNNER_EXECUTABLE
         ))
     elif mode_code == "MPI":
         # Tryb tylko MPI Color i Grayscale
         commands_to_run.append((
-            [MPI_EXECUTABLE, "-np", str(MPI_PROCS), MPI_RUNNER_EXECUTABLE, image_path, "MPI_GRAY"], 
+            [MPI_EXECUTABLE, "-np", str(MPI_PROCS), MPI_RUNNER_EXECUTABLE, image_path, "MPI_GRAY", str(num_bins)], 
             f"MPI ({MPI_PROCS} procesów)", 
             MPI_RUNNER_EXECUTABLE
         ))
         commands_to_run.append((
-            [MPI_EXECUTABLE, "-np", str(MPI_PROCS), MPI_RUNNER_EXECUTABLE, image_path, "MPI_COLOR"], 
+            [MPI_EXECUTABLE, "-np", str(MPI_PROCS), MPI_RUNNER_EXECUTABLE, image_path, "MPI_COLOR", str(num_bins)], 
             f"MPI ({MPI_PROCS} procesów)", 
             MPI_RUNNER_EXECUTABLE
         ))
     else:
         # Inne tryby (SEQ, OMP, CUDA, SCALING)
         commands_to_run.append((
-            [CPP_EXECUTABLE, image_path, mode_code], 
+            [CPP_EXECUTABLE, image_path, mode_code, str(num_bins)], 
             selected_mode, 
             CPP_EXECUTABLE
         ))
@@ -528,6 +536,16 @@ mode_map = {
     "Tylko skalowalność": "SCALING", 
 }
 
+# --- Sekcja wyboru liczby przedziałów (BIN) ---
+tk.Label(left_frame, text="Liczba przedziałów (L_bins):", font=("Arial", 11, "bold")).pack(anchor='w', pady=(10, 0))
+
+bin_count = tk.StringVar(root) # Zmienna do przechowywania wybranej wartości
+bin_options = [256, 128, 64, 32, 16] # Opcje do testowania
+bin_count.set(bin_options[0]) # Domyślnie 256
+
+bin_combobox = ttk.Combobox(left_frame, textvariable=bin_count, state="readonly", width=40)
+bin_combobox['values'] = bin_options
+bin_combobox.pack(anchor='w', padx=5, pady=5)
 
 # --- Sekcja podsumowania wyników ---
 tk.Label(left_frame, text="Podsumowanie wyników:", font=("Arial", 11, "bold")).pack(anchor='w', pady=(10, 0))

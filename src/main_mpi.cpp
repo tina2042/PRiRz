@@ -10,12 +10,12 @@
 #include "parallel_mpi.hpp" 
 #include "sequential_proc.hpp"
 // Wymagane funkcje referencyjne z sequential_proc.cpp
-std::vector<int> calculateHistogram(const cv::Mat& image); 
+std::vector<int> calculateHistogram(const cv::Mat& image, int num_bins); 
 // Zakładamy, że color version wygląda tak:
-std::vector<std::vector<int>> calculateColorHistogram(const cv::Mat& image); 
+std::vector<std::vector<int>> calculateColorHistogram(const cv::Mat& image, int num_bins); 
 // Wymagane dla SEQ (wersji wzorcowej)
-cv::Mat equalize_SEQ_Grayscale(const cv::Mat& inputImage);
-cv::Mat equalize_SEQ_Color(const cv::Mat& inputImage);
+cv::Mat equalize_SEQ_Grayscale(const cv::Mat& inputImage, int num_bins);
+cv::Mat equalize_SEQ_Color(const cv::Mat& inputImage, int num_bins);
 
 // Funkcja pomocnicza do tworzenia katalogu, jeśli nie istnieje
 void createDirectory(const std::string& path) {
@@ -37,20 +37,36 @@ std::string generateUniqueFilename(const std::string& prefix, const std::string&
 
 
 int main(int argc, char** argv) {
+    int DEFAULT_BINS = 256;
     MPI_Init(&argc, &argv);
 
     int rank, size;
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
-    if (argc != 3) {
+   if (argc < 3 || argc > 4) {
         if (rank == 0) {
-            std::cerr << "Uzycie MPI: mpirun -np N ./mpi_runner <sciezka_do_obrazu> <tryb_MPI>" << std::endl;
+            std::cerr << "Uzycie MPI: mpirun -np N ./mpi_runner <sciezka_do_obrazu> <tryb_MPI> [num_bins]" << std::endl;
+            std::cerr << "Opcjonalny argument num_bins domyslnie: 256." << std::endl;
         }
         MPI_Finalize();
         return -1;
     }
-    
+
+    if (argc == 4) {
+        try {
+            DEFAULT_BINS = std::stoi(argv[3]);
+            if (DEFAULT_BINS <= 0 || DEFAULT_BINS > 256) {
+                throw std::out_of_range("Liczba przedzialow poza zakresem (1-256).");
+             }
+         } catch (const std::invalid_argument& e) {
+             if (rank == 0) std::cerr << "Blad: Argument num_bins nie jest poprawna liczba. Uzyto domyslnej wartosci: 256." << std::endl;
+             DEFAULT_BINS = 256;
+        } catch (const std::out_of_range& e) {
+            if (rank == 0) std::cerr << "Blad: Liczba przedzialow poza zakresem. Uzyto domyslnej wartosci: 256." << std::endl;
+         DEFAULT_BINS = 256;
+        }
+    }
     // Pobierz tryb raz
     const std::string requested_mode = argv[2];
     
@@ -92,22 +108,22 @@ int main(int argc, char** argv) {
     if (requested_mode == "MPI_COLOR") {
         if (rank == 0) {
             double start_mpi = MPI_Wtime();
-            outputImageMPI = equalize_MPI_Color(inputImage, rank, size);
+            outputImageMPI = equalize_MPI_Color(inputImage, rank, size, DEFAULT_BINS);
             double end_mpi = MPI_Wtime();
             duration_mpi = (end_mpi - start_mpi) * 1000.0;
         } else {
             // Proces slave musi znać tryb
-            equalize_MPI_Color(cv::Mat(), rank, size);
+            equalize_MPI_Color(cv::Mat(), rank, size, DEFAULT_BINS);
         }
 
     } else { // Tryb MPI_GRAY
         if (rank == 0) {
             double start_mpi = MPI_Wtime();
-            outputImageMPI = equalize_MPI_Grayscale(inputImage, rank, size);
+            outputImageMPI = equalize_MPI_Grayscale(inputImage, rank, size, DEFAULT_BINS);
             double end_mpi = MPI_Wtime();
             duration_mpi = (end_mpi - start_mpi) * 1000.0;
         } else {
-            equalize_MPI_Grayscale(cv::Mat(), rank, size);
+            equalize_MPI_Grayscale(cv::Mat(), rank, size, DEFAULT_BINS);
         }
     }
     
@@ -123,11 +139,11 @@ int main(int argc, char** argv) {
         if (requested_mode == "MPI_COLOR") {
             // Wersja kolorowa jest bardziej skomplikowana; dla prostoty używamy bezpośredniej funkcji sekwencyjnej
             // Zakładamy, że masz zaimplementowaną funkcję applyColorEqualization (która wykonuje to wszystko sekwencyjnie)
-            outputImageSEQ_Reference = equalize_SEQ_Color(inputImage);
+            outputImageSEQ_Reference = equalize_SEQ_Color(inputImage, DEFAULT_BINS);
             mode_label = "Color";
         } else {
             // Zakładamy, że masz zaimplementowaną funkcję applyEqualization
-            outputImageSEQ_Reference = equalize_SEQ_Grayscale(inputImage);
+            outputImageSEQ_Reference = equalize_SEQ_Grayscale(inputImage, DEFAULT_BINS);
             mode_label = "Gray";
         }
 
@@ -137,8 +153,8 @@ int main(int argc, char** argv) {
 
         if (mode_label == "Color") {
             // Weryfikacja dla kolorów (B+G+R)
-            auto hist_mpi_color = calculateColorHistogram(outputImageMPI);
-            auto hist_seq_color = calculateColorHistogram(outputImageSEQ_Reference);
+            auto hist_mpi_color = calculateColorHistogram(outputImageMPI, DEFAULT_BINS);
+            auto hist_seq_color = calculateColorHistogram(outputImageSEQ_Reference, DEFAULT_BINS);
 
             for (int c = 0; c < 3; ++c) {
                 int diff_channel = 0;
@@ -152,8 +168,8 @@ int main(int argc, char** argv) {
         
         } else {
             // Weryfikacja dla skali szarości (Grayscale)
-            auto hist_mpi_gray = calculateHistogram(outputImageMPI);
-            auto hist_seq_gray = calculateHistogram(outputImageSEQ_Reference);
+            auto hist_mpi_gray = calculateHistogram(outputImageMPI, DEFAULT_BINS);
+            auto hist_seq_gray = calculateHistogram(outputImageSEQ_Reference, DEFAULT_BINS);
 
             for (int i = 0; i < 256; ++i)
                 total_diff += std::abs(hist_seq_gray[i] - hist_mpi_gray[i]);

@@ -528,12 +528,20 @@ std::vector<int> getSafeThreadCounts() {
 }
 
 int main(int argc, char** argv) {
-    if (argc < 2 || argc > 3) {
+    if (argc < 3 || argc > 4) {
         std::cerr << "Uzycie: " << argv[0] << " <sciezka_do_obrazu> [tryb]" << std::endl;
         std::cerr << "Tryby: ALL, SEQ, OMP, CUDA, SEQ_OMP, SEQ_CUDA, OMP_CUDA, SCALING" << std::endl;
         return -1;
     }
-
+    int DEFAULT_BINS = 256;
+    if (argc == 4) {
+        try {
+            DEFAULT_BINS = std::stoi(argv[3]);
+        } catch (...) {
+            std::cerr << "Blad: Wystapil nieznany blad konwersji. Uzyto domyslnej wartosci: 256." << std::endl;
+            DEFAULT_BINS = 256;
+        }
+    }
     std::string mode = "ALL";
     if (argc == 3) {
         mode = argv[2];
@@ -587,7 +595,7 @@ int main(int argc, char** argv) {
         std::cout << "\n--- 1. Sekwencyjny Proces (Grayscale) ---" << std::endl;
 
         long long duration_seq = measureAverageTime([&]() {
-            std::vector<int> hist_seq = calculateHistogram(inputImageGray);
+            std::vector<int> hist_seq = calculateHistogram(inputImageGray, DEFAULT_BINS);
             std::vector<int> cdf_seq = calculateCDF(hist_seq);
             outputImageSeq = applyEqualization(inputImageGray, cdf_seq);
             return outputImageSeq;
@@ -610,7 +618,7 @@ int main(int argc, char** argv) {
         std::cout << "\n--- 1b. Sekwencyjny Proces (Color) ---" << std::endl;
 
         long long duration_seq_color = measureAverageTime([&]() {
-            auto hist_seq_color = calculateColorHistogram(inputImageColor);
+            auto hist_seq_color = calculateColorHistogram(inputImageColor, DEFAULT_BINS);
 
             std::vector<std::vector<int>> cdf_seq_color(3);
             for (int c = 0; c < 3; ++c)
@@ -642,7 +650,7 @@ int main(int argc, char** argv) {
         std::cout << "\n--- 2. Proces OpenMP (Grayscale) ---" << std::endl;
 
         long long duration_omp_gray = measureAverageTime([&]() {
-            outputImageOMPGray = equalize_OMP_Grayscale(inputImageGray);
+            outputImageOMPGray = equalize_OMP_Grayscale(inputImageGray, DEFAULT_BINS);
             return outputImageOMPGray;
         });
 
@@ -658,8 +666,8 @@ int main(int argc, char** argv) {
         // Weryfikacja poprawności wyników OpenMP  - porównanie z wynikami sekwencyjnymi (dla grayscale)
         if (ran_seq) {
             std::cout << "\n--- Weryfikacja poprawności wyników OpenMP  - porównanie z wynikami sekwencyjnymi (dla grayscale) ---" << std::endl;
-            auto hist_seq_local = calculateHistogram(outputImageSeq);
-            auto hist_omp_local = calculateHistogram(outputImageOMPGray);
+            auto hist_seq_local = calculateHistogram(outputImageSeq, DEFAULT_BINS);
+            auto hist_omp_local = calculateHistogram(outputImageOMPGray, DEFAULT_BINS);
 
             int diff = 0;
             for (int i = 0; i < 256; ++i)
@@ -678,7 +686,7 @@ int main(int argc, char** argv) {
         std::cout << "\n--- 3. Proces OpenMP (Color) ---" << std::endl;
 
         long long duration_omp_color = measureAverageTime([&]() {
-            outputImageOMPColor = equalize_OMP_Color(inputImageColor);
+            outputImageOMPColor = equalize_OMP_Color(inputImageColor, DEFAULT_BINS);
             return outputImageOMPColor;
         });
 
@@ -699,7 +707,7 @@ int main(int argc, char** argv) {
         std::cout << "\n--- 4. Proces CUDA (Grayscale) ---" << std::endl;
 
         long long duration_cuda = measureAverageTime([&]() {
-            outputImageCUDA = equalize_CUDA_Grayscale(inputImageGray, 256);
+            outputImageCUDA = equalize_CUDA_Grayscale(inputImageGray, 256, DEFAULT_BINS);
             return outputImageCUDA;
         });
 
@@ -715,8 +723,8 @@ int main(int argc, char** argv) {
         // Weryfikacja poprawności z wersją sekwencyjną
         if (ran_seq) {
             std::cout << "\n--- Weryfikacja wyników CUDA (grayscale) ---" << std::endl;
-            auto hist_cuda = calculateHistogram(outputImageCUDA);
-            auto hist_seq_local = calculateHistogram(outputImageSeq);
+            auto hist_cuda = calculateHistogram(outputImageCUDA, DEFAULT_BINS);
+            auto hist_seq_local = calculateHistogram(outputImageSeq, DEFAULT_BINS);
 
             int diff_cuda = 0;
             for (int i = 0; i < 256; ++i)
@@ -735,7 +743,7 @@ int main(int argc, char** argv) {
         std::cout << "\n--- 5. Proces CUDA (Color) ---" << std::endl;
 
         long long duration_cuda_color = measureAverageTime([&]() {
-            outputImageCUDAColor = equalize_CUDA_Color(inputImageColor, 256);
+            outputImageCUDAColor = equalize_CUDA_Color(inputImageColor, 256, DEFAULT_BINS);
             return outputImageCUDAColor;
         });
 
@@ -755,8 +763,8 @@ int main(int argc, char** argv) {
     if (ran_seq_color && ran_omp_color) {
         std::cout << "\n--- Weryfikacja poprawności wyników (Color) ---" << std::endl;
 
-        auto hist_seq_color = calculateColorHistogram(outputImageSeqColor);
-        auto hist_omp_color = calculateColorHistogram(outputImageOMPColor);
+        auto hist_seq_color = calculateColorHistogram(outputImageSeqColor, DEFAULT_BINS);
+        auto hist_omp_color = calculateColorHistogram(outputImageOMPColor, DEFAULT_BINS);
 
         int total_diff_omp = 0;
         for (int c = 0; c < 3; ++c) {
@@ -781,13 +789,13 @@ int main(int argc, char** argv) {
     // Weryfikacja wyników kolorowych (SEQ vs CUDA Color)
     // ===================================================================
     if (ran_seq_color && ran_cuda_color) {
-        auto hist_cuda_color = calculateColorHistogram(outputImageCUDAColor);
+        auto hist_cuda_color = calculateColorHistogram(outputImageCUDAColor, DEFAULT_BINS);
 
         int total_diff_cuda = 0;
         for (int c = 0; c < 3; ++c) {
             int diff_channel = 0;
             for (int i = 0; i < 256; ++i)
-                diff_channel += std::abs(calculateColorHistogram(outputImageSeqColor)[c][i] - hist_cuda_color[c][i]);
+                diff_channel += std::abs(calculateColorHistogram(outputImageSeqColor, DEFAULT_BINS)[c][i] - hist_cuda_color[c][i]);
             total_diff_cuda += diff_channel;
             std::string channel_name = (c == 0 ? "B" : (c == 1 ? "G" : "R"));
             std::cout << "Różnica histogramów kanału " << channel_name 
@@ -807,8 +815,8 @@ int main(int argc, char** argv) {
         std::cout << "\n--- Weryfikacja wyników CUDA (Color) ---" << std::endl;
 
         // Dla uproszczenia: porównujemy histogramy zliczone globalnie (nalezy dopracowac dla kanalow B/G/R)
-        auto hist_cuda_R = calculateHistogram(outputImageCUDAColor);
-        auto hist_omp_color1 = calculateHistogram(outputImageOMPColor);
+        auto hist_cuda_R = calculateHistogram(outputImageCUDAColor, DEFAULT_BINS);
+        auto hist_omp_color1 = calculateHistogram(outputImageOMPColor, DEFAULT_BINS);
 
         int diff_cuda_color = 0;
         for (int i = 0; i < 256; ++i)
@@ -839,7 +847,7 @@ int main(int argc, char** argv) {
             omp_set_num_threads(threads);
             
             long long duration = measureAverageTime([&]() {
-                equalize_OMP_Grayscale(inputImageGray);
+                equalize_OMP_Grayscale(inputImageGray, DEFAULT_BINS);
                 return cv::Mat();
             });
             
@@ -855,7 +863,7 @@ int main(int argc, char** argv) {
             omp_set_num_threads(threads);
 
             long long duration = measureAverageTime([&]() {
-                equalize_OMP_Color(inputImageColor);
+                equalize_OMP_Color(inputImageColor, DEFAULT_BINS);
                 return cv::Mat();
             });
 
@@ -872,7 +880,7 @@ int main(int argc, char** argv) {
         std::vector<int> threadOptions = {64, 128, 256, 512, 1024};
         for (int threads : threadOptions) {
             long long duration = measureAverageTime([&]() {
-                equalize_CUDA_Grayscale(inputImageGray, threads);
+                equalize_CUDA_Grayscale(inputImageGray, threads, DEFAULT_BINS);
                 return cv::Mat();
             });
 
@@ -887,7 +895,7 @@ int main(int argc, char** argv) {
 
         for (int threads : threadOptions) {
             long long duration = measureAverageTime([&]() {
-                equalize_CUDA_Color(inputImageColor, threads);
+                equalize_CUDA_Color(inputImageColor, threads, DEFAULT_BINS);
                 return cv::Mat();
             });
 

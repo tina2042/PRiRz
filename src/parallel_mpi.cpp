@@ -6,11 +6,15 @@
 // std::vector<int> calculateCDF(const std::vector<int>& hist);
 // cv::Mat applyEqualization(const cv::Mat& inputImage, const std::vector<int>& cdf);
 
-cv::Mat equalize_MPI_Grayscale(const cv::Mat& inputImage, int rank, int size) {
+cv::Mat equalize_MPI_Grayscale(const cv::Mat& inputImage, int rank, int size, int num_bins) {
     
-    // Ustawienia dla 8-bitowego obrazu szarego
-    const int NUM_BINS = 256; 
+    const int MAX_INTENSITY = 256; 
+    // Ograniczamy num_bins
+    num_bins = std::max(1, std::min(MAX_INTENSITY, num_bins)); 
     
+    // Obliczanie współczynnika skalowania
+    const double scale = (double)num_bins / (double)MAX_INTENSITY;
+
     // Zmienne używane tylko przez proces 0
     int total_rows = 0;
     int total_cols = 0;
@@ -75,24 +79,32 @@ cv::Mat equalize_MPI_Grayscale(const cv::Mat& inputImage, int rank, int size) {
     // 3. Obliczanie Częściowego Histogramu
     // ----------------------------------------------------------------------
     
-    std::vector<int> local_hist(NUM_BINS, 0); // Lokalny histogram
+    std::vector<int> local_hist(num_bins, 0); // Lokalny histogram
     
     // Iteracja po swoim bloku danych
     for (int i = 0; i < chunk_size; ++i) {
-        local_hist[local_data[i]]++;
+        int pixel_value = local_data[i];
+        
+        // SKALOWANIE: Mapowanie 0-255 na 0-(num_bins-1)
+        int bin_index = (int)(pixel_value * scale);
+        
+        // Zabezpieczenie
+        if (bin_index >= num_bins) bin_index = num_bins - 1;
+        
+        local_hist[bin_index]++;
     }
 
     // ----------------------------------------------------------------------
     // 4. Sumowanie Histogramów (Redukcja)
     // ----------------------------------------------------------------------
 
-    std::vector<int> global_hist(NUM_BINS, 0); // Globalny histogram (tylko na procesie 0)
+    std::vector<int> global_hist(num_bins, 0); // Globalny histogram (tylko na procesie 0)
 
     // MPI_Reduce: Sumuj lokalne histogramy w globalny_hist na procesie 0
     MPI_Reduce(
         local_hist.data(), // Bufor źródłowy (local_hist)
         global_hist.data(),// Bufor docelowy (global_hist)
-        NUM_BINS,          // Liczba elementów do zsumowania
+        num_bins,          // Liczba elementów do zsumowania
         MPI_INT,           // Typ danych (liczniki są typu int)
         MPI_SUM,           // Operacja sumowania
         0,                 // Proces docelowy (Root)
@@ -120,10 +132,14 @@ cv::Mat equalize_MPI_Grayscale(const cv::Mat& inputImage, int rank, int size) {
     return cv::Mat();
 }
 
-cv::Mat equalize_MPI_Color(const cv::Mat& inputImage, int rank, int size) {
+cv::Mat equalize_MPI_Color(const cv::Mat& inputImage, int rank, int size, int num_bins) {
     
-    const int NUM_BINS = 256; 
+    const int MAX_INTENSITY = 256;
     const int NUM_CHANNELS = 3; 
+    // Ograniczamy num_bins
+    num_bins = std::max(1, std::min(MAX_INTENSITY, num_bins));
+    // Obliczanie współczynnika skalowania
+    const double scale = (double)num_bins / (double)MAX_INTENSITY;
 
     // Zmienne używane tylko przez proces 0
     int total_pixels = 0;
@@ -177,14 +193,24 @@ cv::Mat equalize_MPI_Color(const cv::Mat& inputImage, int rank, int size) {
     
     // Alokujemy jeden duży bufor do przechowywania trzech histogramów: [B | G | R]
     // Ten bufor ma rozmiar: 3 * 256
-    std::vector<int> local_hists_flat(NUM_BINS * NUM_CHANNELS, 0); 
+    std::vector<int> local_hists_flat(num_bins * NUM_CHANNELS, 0); 
     
-    // Zliczanie
+   // Zliczanie
     for (int i = 0; i < chunk_size_bytes; i += NUM_CHANNELS) {
-        // W OpenCV format to BGR
-        local_hists_flat[0 * NUM_BINS + local_data[i + 0]]++; // B
-        local_hists_flat[1 * NUM_BINS + local_data[i + 1]]++; // G
-        local_hists_flat[2 * NUM_BINS + local_data[i + 2]]++; // R
+        
+        // SKALOWANIE i ZABEZPIECZENIE
+        int bin_b = (int)(local_data[i + 0] * scale);
+        int bin_g = (int)(local_data[i + 1] * scale);
+        int bin_r = (int)(local_data[i + 2] * scale);
+
+        if (bin_b >= num_bins) bin_b = num_bins - 1;
+        if (bin_g >= num_bins) bin_g = num_bins - 1;
+        if (bin_r >= num_bins) bin_r = num_bins - 1;
+
+        // Zliczanie
+        local_hists_flat[0 * num_bins + bin_b]++; // B
+        local_hists_flat[1 * num_bins + bin_g]++; // G
+        local_hists_flat[2 * num_bins + bin_r]++; // R
     }
 
     // ----------------------------------------------------------------------
@@ -192,13 +218,13 @@ cv::Mat equalize_MPI_Color(const cv::Mat& inputImage, int rank, int size) {
     // ----------------------------------------------------------------------
 
     // Globalny bufor do sumowania (tylko proces 0)
-    std::vector<int> global_hists_flat(NUM_BINS * NUM_CHANNELS, 0); 
+    std::vector<int> global_hists_flat(num_bins * NUM_CHANNELS, 0); 
 
     // MPI_Reduce sumuje cały bufor (3 * 256 elementów) jednocześnie
     MPI_Reduce(
         local_hists_flat.data(), 
         global_hists_flat.data(),
-        NUM_BINS * NUM_CHANNELS, // Redukujemy 768 elementów
+        num_bins * NUM_CHANNELS, // Redukujemy 768 elementów
         MPI_INT, 
         MPI_SUM, 
         0, 
@@ -214,8 +240,8 @@ cv::Mat equalize_MPI_Color(const cv::Mat& inputImage, int rank, int size) {
         std::vector<std::vector<int>> final_hists(NUM_CHANNELS);
         for (int c = 0; c < NUM_CHANNELS; ++c) {
             final_hists[c].assign(
-                global_hists_flat.begin() + c * NUM_BINS,
-                global_hists_flat.begin() + (c + 1) * NUM_BINS
+                global_hists_flat.begin() + c * num_bins,
+                global_hists_flat.begin() + (c + 1) * num_bins
             );
         }
 
