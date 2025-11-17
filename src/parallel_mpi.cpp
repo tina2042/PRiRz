@@ -15,63 +15,85 @@ cv::Mat equalize_MPI_Grayscale(const cv::Mat& inputImage, int rank, int size, in
     // Obliczanie współczynnika skalowania
     const double scale = (double)num_bins / (double)MAX_INTENSITY;
 
-    // Zmienne używane tylko przez proces 0
+    // Zmienne używane tylko przez proces 0 (zostaną rozesłane przez Bcast/Scatterv)
     int total_rows = 0;
     int total_cols = 0;
-    
+    int total_pixels = 0;
+
+    // Tablice dla MPI_Scatterv (tylko na procesie 0)
+    std::vector<int> sendcounts; // Ile pikseli wysłać do każdego procesu
+    std::vector<int> displs;     // Przesunięcie początkowe w globalnym buforze
+
     // Zmienne używane przez wszystkie procesy
-    int rows_per_proc = 0;
-    int chunk_size = 0; // Liczba pikseli, które każdy proces przetwarza
-    
+    int local_chunk_size = 0; // Liczba pikseli, które ten proces przetwarza
+
     // ----------------------------------------------------------------------
-    // 1. Dystrybucja Informacji o Rozmiarze (tylko proces 0 wie o obrazie)
+    // 1. Dystrybucja Informacji o Rozmiarze i Obliczenie Dystrybucji
     // ----------------------------------------------------------------------
     if (rank == 0) {
         if (inputImage.empty() || inputImage.channels() != 1) return cv::Mat();
-        
+
         total_rows = inputImage.rows;
         total_cols = inputImage.cols;
-        
-        // Obliczamy ile wierszy każdy proces powinien otrzymać
-        rows_per_proc = total_rows / size;
-        chunk_size = rows_per_proc * total_cols;
-        
-        // Sprawdzanie, czy wiersze są podzielne (uproszczenie)
-        if (total_rows % size != 0) {
-            std::cerr << "Blad: Liczba wierszy nie jest podzielna przez liczbe procesow. Wymagana jest modyfikacja dystrybucji." << std::endl;
-            // W bardziej zaawansowanej wersji, proces 0 bierze resztę.
-            // Dla projektu zakładamy podzielność dla uproszczenia dystrybucji.
-            MPI_Abort(MPI_COMM_WORLD, 1);
-            return cv::Mat();
+        total_pixels = total_rows * total_cols;
+
+        sendcounts.resize(size);
+        displs.resize(size);
+        int current_displacement = 0;
+
+        // Obliczanie równomiernego podziału z obsługą reszty (remainder)
+        int base_rows_per_proc = total_rows / size;
+        int remainder = total_rows % size;
+
+        for (int i = 0; i < size; ++i) {
+            // Procesy 0 do remainder-1 dostają jeden wiersz więcej
+            int rows_for_proc = base_rows_per_proc + (i < remainder ? 1 : 0);
+            sendcounts[i] = rows_for_proc * total_cols; // Liczba pikseli (uchar)
+            displs[i] = current_displacement;
+            current_displacement += sendcounts[i];
         }
     }
-
-    // Nadaj rozmiar bloku każdemu procesowi
-    MPI_Bcast(&chunk_size, 1, MPI_INT, 0, MPI_COMM_WORLD);
     
+    // --- Rozesłanie danych konfiguracyjnych dla wszystkich procesów ---
+
+    // 1a. Rozesłanie liczby kolumn (potrzebne do określenia rozmiaru wiersza)
+    MPI_Bcast(&total_cols, 1, MPI_INT, 0, MPI_COMM_WORLD);
+    
+    // 1b. Rozesłanie INDYWIDUALNEGO rozmiaru bloku (local_chunk_size) do każdego procesu 
+    // poprzez wykorzystanie obliczonej wcześniej tablicy sendcounts i MPI_Scatter.
+    // Używamy sendcounts z rank 0 jako danych wejściowych dla MPI_Scatter.
+    // Na procesie 0: wysyłamy sendcounts[i] do procesu i.
+    MPI_Scatter(
+        rank == 0 ? sendcounts.data() : nullptr, // Tylko root ma pełną tablicę
+        1,                                       // Wysyłamy jedną wartość INT do każdego
+        MPI_INT, 
+        &local_chunk_size,                       // Każdy proces odbiera SWÓJ rozmiar bloku
+        1, 
+        MPI_INT, 
+        0, 
+        MPI_COMM_WORLD
+    );
+
     // ----------------------------------------------------------------------
     // 2. Podział Danych i Alokacja Pamięci
     // ----------------------------------------------------------------------
     
-    // Zdefiniowanie bufora wejściowego dla procesu (dla jego części obrazu)
-    std::vector<uchar> local_data(chunk_size);
+    // Zdefiniowanie bufora wejściowego dla procesu (używamy poprawnego rozmiaru!)
+    std::vector<uchar> local_data(local_chunk_size);
     
     // Wskaźnik na cały obraz (tylko proces 0)
-    uchar* global_data_ptr = nullptr;
-    if (rank == 0) {
-        global_data_ptr = inputImage.data;
-    }
+    uchar* global_data_ptr = (rank == 0) ? inputImage.data : nullptr;
 
-    // MPI_Scatter: Rozprosz obraz. 
-    // Przesyłamy chunk_size pikseli z global_data_ptr do local_data.data()
-    MPI_Scatter(
-        global_data_ptr, // Bufor źródłowy (tylko na procesie 0)
-        chunk_size,      // Liczba elementów wysyłana do każdego procesu
-        MPI_UNSIGNED_CHAR, // Typ danych (uchar - 8-bitowy piksel)
-        local_data.data(), // Bufor docelowy (na każdym procesie)
-        chunk_size,      // Liczba elementów otrzymywana
+    // MPI_Scatterv: Rozprosz obraz ze zmiennymi rozmiarami. 
+    MPI_Scatterv(
+        global_data_ptr,                           // Bufor źródłowy (tylko na procesie 0)
+        rank == 0 ? sendcounts.data() : nullptr,   // Rozmiary wysyłanych bloków (tylko na procesie 0)
+        rank == 0 ? displs.data() : nullptr,       // Przesunięcia (tylko na procesie 0)
+        MPI_UNSIGNED_CHAR,                         // Typ danych (uchar - 8-bitowy piksel)
+        local_data.data(),                         // Bufor docelowy (na każdym procesie)
+        local_chunk_size,                          // Rozmiar otrzymywanego bloku (dla tego procesu)
         MPI_UNSIGNED_CHAR,
-        0,               // Proces źródłowy (Root)
+        0,                                         // Proces źródłowy (Root)
         MPI_COMM_WORLD
     );
 
@@ -81,8 +103,8 @@ cv::Mat equalize_MPI_Grayscale(const cv::Mat& inputImage, int rank, int size, in
     
     std::vector<int> local_hist(num_bins, 0); // Lokalny histogram
     
-    // Iteracja po swoim bloku danych
-    for (int i = 0; i < chunk_size; ++i) {
+    // Iteracja po swoim bloku danych (używamy poprawnego rozmiaru!)
+    for (int i = 0; i < local_chunk_size; ++i) { 
         int pixel_value = local_data[i];
         
         // SKALOWANIE: Mapowanie 0-255 na 0-(num_bins-1)
@@ -97,17 +119,18 @@ cv::Mat equalize_MPI_Grayscale(const cv::Mat& inputImage, int rank, int size, in
     // ----------------------------------------------------------------------
     // 4. Sumowanie Histogramów (Redukcja)
     // ----------------------------------------------------------------------
+    // (Ta sekcja nie wymaga zmian, ponieważ rozmiar histogramu jest stały: num_bins)
 
     std::vector<int> global_hist(num_bins, 0); // Globalny histogram (tylko na procesie 0)
 
     // MPI_Reduce: Sumuj lokalne histogramy w globalny_hist na procesie 0
     MPI_Reduce(
-        local_hist.data(), // Bufor źródłowy (local_hist)
-        global_hist.data(),// Bufor docelowy (global_hist)
-        num_bins,          // Liczba elementów do zsumowania
-        MPI_INT,           // Typ danych (liczniki są typu int)
-        MPI_SUM,           // Operacja sumowania
-        0,                 // Proces docelowy (Root)
+        local_hist.data(), 
+        global_hist.data(),
+        num_bins, 
+        MPI_INT, 
+        MPI_SUM, 
+        0, 
         MPI_COMM_WORLD
     );
 
@@ -116,19 +139,12 @@ cv::Mat equalize_MPI_Grayscale(const cv::Mat& inputImage, int rank, int size, in
     // ----------------------------------------------------------------------
     
     if (rank == 0) {
-        // Proces 0 kontynuuje, aby zakończyć equalizację:
-        
-        // 5a. Obliczenie CDF i LUT (sekwencyjne, ponieważ jest szybkie)
+        // ... (Logika finalna bez zmian)
         std::vector<int> cdf = calculateCDF(global_hist);
-        
-        // 5b. Zastosowanie equalizacji na całym obrazie
-        // Używamy sekwencyjnej funkcji applyEqualization z globalnym CDF
         cv::Mat outputImage = applyEqualization(inputImage, cdf); 
-        
         return outputImage;
     }
     
-    // Inne procesy zwracają pustą macierz, gdyż ich praca jest zakończona
     return cv::Mat();
 }
 
