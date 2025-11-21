@@ -534,19 +534,24 @@ int main(int argc, char** argv) {
         return -1;
     }
     int DEFAULT_BINS = 256;
+    std::string mode = "ALL";
     if (argc == 4) {
         try {
             DEFAULT_BINS = std::stoi(argv[3]);
+            mode = argv[2];
+            // Normalize to uppercase for safety (very simple)
+            std::transform(mode.begin(), mode.end(), mode.begin(), ::toupper);
         } catch (...) {
             std::cerr << "Blad: Wystapil nieznany blad konwersji. Uzyto domyslnej wartosci: 256." << std::endl;
             DEFAULT_BINS = 256;
         }
     }
-    std::string mode = "ALL";
+
     if (argc == 3) {
         mode = argv[2];
         // Normalize to uppercase for safety (very simple)
         std::transform(mode.begin(), mode.end(), mode.begin(), ::toupper);
+        std::cout << "Używam trybu"<<argv[2]<< std::endl;
     }
 
     // Helper: sprawdź czy wykonać daną sekcję
