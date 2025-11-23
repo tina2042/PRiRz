@@ -61,10 +61,8 @@ std::vector<int> calculateHistogram_OMP_Grayscale(const cv::Mat& image, int num_
     
     
     // 3. Redukcja (Sumowanie Lokalnych Histogramów do Globalnego)
-    // REDUKCJA SEKWENCYJNA
     std::vector<int> global_hist(num_bins, 0);
     for (int t = 0; t < num_threads; ++t) {
-        // Redukcja odbywa się tylko do num_bins elementów, nie do 256
         for (int b = 0; b < num_bins; ++b) { 
             global_hist[b] += local_hists[t][b];
         }
