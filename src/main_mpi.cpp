@@ -149,7 +149,7 @@ int main(int argc, char** argv) {
 
 
         // --- 3B. Obliczanie Różnicy Histogramów ---
-        int total_diff = 0;
+        long long total_diff = 0;
 
         if (mode_label == "Color") {
             // Weryfikacja dla kolorów (B+G+R)
@@ -157,14 +157,18 @@ int main(int argc, char** argv) {
             auto hist_seq_color = calculateColorHistogram(outputImageSEQ_Reference, DEFAULT_BINS);
 
             for (int c = 0; c < 3; ++c) {
-                int diff_channel = 0;
+                long long diff_channel = 0;
                 for (int i = 0; i < 256; ++i)
                     diff_channel += std::abs(hist_seq_color[c][i] - hist_mpi_color[c][i]);
                 total_diff += diff_channel;
+                
+                std::string channel_name = (c == 0 ? "B" : (c == 1 ? "G" : "R"));
+                std::cout << "Różnica histogramów kanału " << channel_name 
+                    << " SEQ vs MPI: " << diff_channel << std::endl; // <--- NOWY OUTPUT
             }
             
             // Wypisanie sumy różnic dla interfejsu Pythona
-            std::cout << "Różnica histogramów (B+G+R) SEQ Color vs MPI Color: " << total_diff << std::endl;
+            std::cout << "Różnica histogramów SEQ Color vs MPI Color: " << total_diff << std::endl;
         
         } else {
             // Weryfikacja dla skali szarości (Grayscale)

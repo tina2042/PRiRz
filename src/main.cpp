@@ -238,7 +238,7 @@ int main(int argc, char** argv) {
             auto hist_seq_local = calculateHistogram(outputImageSeq, DEFAULT_BINS);
             auto hist_omp_local = calculateHistogram(outputImageOMPGray, DEFAULT_BINS);
 
-            int diff = 0;
+            long long diff = 0;
             for (int i = 0; i < 256; ++i)
                 diff += std::abs(hist_seq_local[i] - hist_omp_local[i]);
 
@@ -295,7 +295,7 @@ int main(int argc, char** argv) {
             auto hist_cuda = calculateHistogram(outputImageCUDA, DEFAULT_BINS);
             auto hist_seq_local = calculateHistogram(outputImageSeq, DEFAULT_BINS);
 
-            int diff_cuda = 0;
+            long long diff_cuda = 0;
             for (int i = 0; i < 256; ++i)
                 diff_cuda += std::abs(hist_seq_local[i] - hist_cuda[i]);
 
@@ -335,9 +335,9 @@ int main(int argc, char** argv) {
         auto hist_seq_color = calculateColorHistogram(outputImageSeqColor, DEFAULT_BINS);
         auto hist_omp_color = calculateColorHistogram(outputImageOMPColor, DEFAULT_BINS);
 
-        int total_diff_omp = 0;
+        long long total_diff_omp = 0;
         for (int c = 0; c < 3; ++c) {
-            int diff_channel = 0;
+            long long diff_channel = 0;
             for (int i = 0; i < 256; ++i)
                 diff_channel += std::abs(hist_seq_color[c][i] - hist_omp_color[c][i]);
             total_diff_omp += diff_channel;
@@ -347,7 +347,7 @@ int main(int argc, char** argv) {
         }
 
         std::cout << std::endl;
-        std::cout << "Różnica histogramów (B+G+R) SEQ Color vs OMP Color: " 
+        std::cout << "Różnica histogramów SEQ Color vs OMP Color: " 
                   << total_diff_omp << std::endl;
         std::cout << std::endl;
     } else {
@@ -360,9 +360,9 @@ int main(int argc, char** argv) {
     if (ran_seq_color && ran_cuda_color) {
         auto hist_cuda_color = calculateColorHistogram(outputImageCUDAColor, DEFAULT_BINS);
 
-        int total_diff_cuda = 0;
+        long long total_diff_cuda = 0;
         for (int c = 0; c < 3; ++c) {
-            int diff_channel = 0;
+            long long diff_channel = 0;
             for (int i = 0; i < 256; ++i)
                 diff_channel += std::abs(calculateColorHistogram(outputImageSeqColor, DEFAULT_BINS)[c][i] - hist_cuda_color[c][i]);
             total_diff_cuda += diff_channel;
@@ -387,7 +387,7 @@ int main(int argc, char** argv) {
         auto hist_cuda_R = calculateHistogram(outputImageCUDAColor, DEFAULT_BINS);
         auto hist_omp_color1 = calculateHistogram(outputImageOMPColor, DEFAULT_BINS);
 
-        int diff_cuda_color = 0;
+        long long diff_cuda_color = 0;
         for (int i = 0; i < 256; ++i)
             diff_cuda_color += std::abs(hist_omp_color1[i] - hist_cuda_R[i]);
 
