@@ -9,17 +9,19 @@
  * @brief Oblicza histogram jasności dla obrazu w skali szarości.
  * * Histogram to wektor zliczający liczbę pikseli dla każdego z 256 poziomów jasności.
  * * @param image Obraz wejściowy (cv::Mat, oczekiwany CV_8UC1).
+ * * @param num_bins Liczba przedziałów
  * @return std::vector<int> Histogram (256 elementów).
  */
-std::vector<int> calculateHistogram(const cv::Mat& image);
+std::vector<int> calculateHistogram(const cv::Mat& image, int num_bins);
 
 /**
  * @brief Oblicza histogram dla obrazu kolorowego (BGR).
  * Dla każdego kanału (B, G, R) generowany jest osobny histogram.
  * @param image Obraz wejściowy (cv::Mat, oczekiwany CV_8UC3).
+ *  * * @param num_bins Liczba przedziałów
  * @return std::vector<std::vector<int>> Wektor 3 histogramów po 256 elementów (kolejno B, G, R).
  */
-std::vector<std::vector<int>> calculateColorHistogram(const cv::Mat& image);
+std::vector<std::vector<int>> calculateColorHistogram(const cv::Mat& image, int num_bins);
 
 /**
  * @brief Oblicza Skumulowaną Dystrybuantę (CDF) na podstawie histogramu.
@@ -44,6 +46,18 @@ cv::Mat applyEqualization(const cv::Mat& inputImage, const std::vector<int>& cdf
  * @param inputImage Obraz wejściowy (CV_8UC3).
  * @return cv::Mat Obraz po equalizacji każdego kanału (B, G, R).
  */
-cv::Mat applyColorEqualization(const cv::Mat& inputImage);
+cv::Mat applyColorEqualization(const cv::Mat& inputImage, int num_bins);
+
+/**
+ * @brief PEŁNA sekwencyjna equalizacja (wzorzec). 
+ * Wykonuje: Histogram -> CDF -> Transformacja.
+ */
+cv::Mat equalize_SEQ_Grayscale(const cv::Mat& inputImage, int num_bins);
+
+/**
+ * @brief PEŁNA sekwencyjna equalizacja kolorów (wzorzec).
+ * Wykonuje: Histogramy_kolorów -> CDFs -> Transformacja_kolorów.
+ */
+cv::Mat equalize_SEQ_Color(const cv::Mat& inputImage, int num_bins);
 
 #endif // SEQUENTIAL_PROC_HPP

@@ -1,0 +1,17 @@
+# Aktualizacja listy pakietów
+sudo apt update
+
+# Instalacja narzędzia do uruchamiania (mpirun) i bibliotek deweloperskich (mpi.h)
+sudo apt install openmpi-bin libopenmpi-dev -y
+
+#upewnij się, że kompilator MPI (mpicxx) działa poprawnie:
+mpicxx -v
+
+# Zakładając, że plik build.sh jest uruchamiany z folderu głównego
+# i kompiluje 'mpi_runner' za pomocą mpicxx:
+./build.sh
+
+# Uruchomienie na 4 procesach:
+mpirun -np 4 ./mpi_runner <sciezka_do_obrazu> MPI_GRAY
+
+lub korzystanie z interface python
