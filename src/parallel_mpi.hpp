@@ -19,4 +19,4 @@ cv::Mat equalize_MPI_Grayscale(const cv::Mat& inputImage, int rank, int size, in
  */
 cv::Mat equalize_MPI_Color(const cv::Mat& inputImage, int rank, int size, int num_bins);
 
-#endif // PARALLEL_MPI_HPP
+#endif 

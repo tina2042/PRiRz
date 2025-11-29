@@ -9,19 +9,17 @@
 #include <sys/stat.h> 
 #include "parallel_mpi.hpp" 
 #include "sequential_proc.hpp"
-// Wymagane funkcje referencyjne z sequential_proc.cpp
+
 std::vector<int> calculateHistogram(const cv::Mat& image, int num_bins); 
-// Zakładamy, że color version wygląda tak:
 std::vector<std::vector<int>> calculateColorHistogram(const cv::Mat& image, int num_bins); 
-// Wymagane dla SEQ (wersji wzorcowej)
+
 cv::Mat equalize_SEQ_Grayscale(const cv::Mat& inputImage, int num_bins);
 cv::Mat equalize_SEQ_Color(const cv::Mat& inputImage, int num_bins);
 
-// Funkcja pomocnicza do tworzenia katalogu, jeśli nie istnieje
 void createDirectory(const std::string& path) {
     mkdir(path.c_str(), 0777); 
 }
-// Funkcja pomocnicza do generowania unikalnej nazwy pliku
+
 std::string generateUniqueFilename(const std::string& prefix, const std::string& outputDir) {
     auto now = std::chrono::system_clock::now();
     std::time_t now_c = std::chrono::system_clock::to_time_t(now);
@@ -67,10 +65,8 @@ int main(int argc, char** argv) {
          DEFAULT_BINS = 256;
         }
     }
-    // Pobierz tryb raz
     const std::string requested_mode = argv[2];
     
-    // Deklaracje zmiennych używanych do zapisu i mierzenia czasu
     cv::Mat outputImageMPI;
     double duration_mpi = 0;
     std::string filename_prefix = "MPI_";
@@ -104,7 +100,6 @@ int main(int argc, char** argv) {
     // ----------------------------------------------------------------------
     // 2. Wykonanie Logiki Równoległej
     // ----------------------------------------------------------------------
-    
     if (requested_mode == "MPI_COLOR") {
         if (rank == 0) {
             double start_mpi = MPI_Wtime();
@@ -112,7 +107,6 @@ int main(int argc, char** argv) {
             double end_mpi = MPI_Wtime();
             duration_mpi = (end_mpi - start_mpi) * 1000.0;
         } else {
-            // Proces slave musi znać tryb
             equalize_MPI_Color(cv::Mat(), rank, size, DEFAULT_BINS);
         }
 
@@ -135,14 +129,10 @@ int main(int argc, char** argv) {
         cv::Mat outputImageSEQ_Reference;
         std::string mode_label = "";
         
-        // Generujemy wzorzec używając sekwencyjnej wersji (którą zakładamy za poprawną)
         if (requested_mode == "MPI_COLOR") {
-            // Wersja kolorowa jest bardziej skomplikowana; dla prostoty używamy bezpośredniej funkcji sekwencyjnej
-            // Zakładamy, że masz zaimplementowaną funkcję applyColorEqualization (która wykonuje to wszystko sekwencyjnie)
             outputImageSEQ_Reference = equalize_SEQ_Color(inputImage, DEFAULT_BINS);
             mode_label = "Color";
         } else {
-            // Zakładamy, że masz zaimplementowaną funkcję applyEqualization
             outputImageSEQ_Reference = equalize_SEQ_Grayscale(inputImage, DEFAULT_BINS);
             mode_label = "Gray";
         }
@@ -164,31 +154,26 @@ int main(int argc, char** argv) {
                 
                 std::string channel_name = (c == 0 ? "B" : (c == 1 ? "G" : "R"));
                 std::cout << "Różnica histogramów kanału " << channel_name 
-                    << " SEQ vs MPI: " << diff_channel << std::endl; // <--- NOWY OUTPUT
+                    << " SEQ vs MPI: " << diff_channel << std::endl; 
             }
             
-            // Wypisanie sumy różnic dla interfejsu Pythona
             std::cout << "Różnica histogramów SEQ Color vs MPI Color: " << total_diff << std::endl;
         
         } else {
-            // Weryfikacja dla skali szarości (Grayscale)
             auto hist_mpi_gray = calculateHistogram(outputImageMPI, DEFAULT_BINS);
             auto hist_seq_gray = calculateHistogram(outputImageSEQ_Reference, DEFAULT_BINS);
 
             for (int i = 0; i < 256; ++i)
                 total_diff += std::abs(hist_seq_gray[i] - hist_mpi_gray[i]);
             
-            // Wypisanie różnicy dla interfejsu Pythona
             std::cout << "Różnica histogramów SEQ vs MPI: " << total_diff << std::endl;
         }
 
         std::string filename_mpi = generateUniqueFilename(filename_prefix, OUTPUT_DIR);
         cv::imwrite(filename_mpi, outputImageMPI);
         
-        // Wypisanie wyniku w formacie oczekiwanym przez Pythona
         std::cout << "Zapisano do: " << filename_mpi << std::endl; 
-        std::cout << "Sredni czas wykonania (MPI): " << duration_mpi << " ms" << std::endl;
-        
+        std::cout << "Sredni czas wykonania (MPI): " << duration_mpi << " ms" << std::endl;       
     }
     
     MPI_Finalize();

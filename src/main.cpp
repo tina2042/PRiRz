@@ -2,7 +2,7 @@
 #include <chrono>
 #include <ctime>
 #include <sstream>
-#include <iomanip> // Dodane dla std::put_time
+#include <iomanip> 
 #include <sys/stat.h>
 #include <string>
 #include <functional>
@@ -18,8 +18,6 @@
 #include "parallel_omp.hpp"
 #include "parallel_cuda.cuh"
 
-
-// Liczba powtórzeń dla uśrednienia
 const int NUM_RUNS = 10;
 
 /**
@@ -30,10 +28,8 @@ const int NUM_RUNS = 10;
 long long measureAverageTime(std::function<cv::Mat()> op) {
     long long total_duration = 0;
 
-    // Wykonaj pomiar N razy
     for (int i = 0; i < NUM_RUNS; ++i) {
         auto start = std::chrono::high_resolution_clock::now();
-        // Wywołanie operacji (np. equalize_OMP_Grayscale)
         op(); 
         auto end = std::chrono::high_resolution_clock::now();
         
@@ -41,16 +37,13 @@ long long measureAverageTime(std::function<cv::Mat()> op) {
         total_duration += duration;
     }
     
-    // Zwróć średnią
     return total_duration / NUM_RUNS;
 }
 
-// Funkcja pomocnicza do tworzenia katalogu, jeśli nie istnieje
 void createDirectory(const std::string& path) {
     mkdir(path.c_str(), 0777); 
 }
 
-// Funkcja pomocnicza do generowania unikalnej nazwy pliku
 std::string generateUniqueFilename(const std::string& prefix, const std::string& outputDir) {
     auto now = std::chrono::system_clock::now();
     std::time_t now_c = std::chrono::system_clock::to_time_t(now);
@@ -79,11 +72,10 @@ std::vector<int> getSafeThreadCounts() {
     cudaGetDeviceProperties(&prop, device);
 
     int maxThreads = prop.maxThreadsPerBlock;
-    int warpSize  = prop.warpSize; // zwykle 32
+    int warpSize  = prop.warpSize; 
 
     std::vector<int> safeCounts;
 
-    // Generujemy wielokrotności warpSize do maxThreads
     for (int t = warpSize; t <= maxThreads; t += warpSize) {
         safeCounts.push_back(t);
     }
@@ -103,7 +95,6 @@ int main(int argc, char** argv) {
         try {
             DEFAULT_BINS = std::stoi(argv[3]);
             mode = argv[2];
-            // Normalize to uppercase for safety (very simple)
             std::transform(mode.begin(), mode.end(), mode.begin(), ::toupper);
         } catch (...) {
             std::cerr << "Blad: Wystapil nieznany blad konwersji. Uzyto domyslnej wartosci: 256." << std::endl;
@@ -113,23 +104,19 @@ int main(int argc, char** argv) {
 
     if (argc == 3) {
         mode = argv[2];
-        // Normalize to uppercase for safety (very simple)
         std::transform(mode.begin(), mode.end(), mode.begin(), ::toupper);
         std::cout << "Używam trybu"<<argv[2]<< std::endl;
     }
 
-    // Helper: sprawdź czy wykonać daną sekcję
     auto shouldRun = [&](const std::initializer_list<std::string>& allowed)->bool {
         if (mode == "ALL") return true;
         for (auto &s : allowed) if (mode == s) return true;
         return false;
     };
 
-    // --- Ustawienia Plików i Katalogów ---
     const std::string OUTPUT_DIR = "data/output/";
     createDirectory(OUTPUT_DIR);
 
-    // --- Ładowanie Obrazów (Raz, Minimalizując I/O) ---
     cv::Mat inputImageGray = cv::imread(argv[1], cv::IMREAD_GRAYSCALE);
     if (inputImageGray.empty()) {
         std::cerr << "Nie udalo sie zaladowac obrazu szarego: " << argv[1] << std::endl;
@@ -141,7 +128,6 @@ int main(int argc, char** argv) {
         return -1;
     }
 
-    // Flagi, żeby wiedzieć które bloki wykonały się (do bezpiecznych porównań)
     bool ran_seq = false;
     bool ran_seq_color = false;
     bool ran_omp_gray = false;
@@ -149,7 +135,6 @@ int main(int argc, char** argv) {
     bool ran_cuda_gray = false;
     bool ran_cuda_color = false;
 
-    // Zmienne dla wyników (deklarujemy na poziomie main, użyjemy gdzie trzeba)
     cv::Mat outputImageSeq; 
     cv::Mat outputImageSeqColor;
     cv::Mat outputImageOMPGray;
@@ -383,7 +368,6 @@ int main(int argc, char** argv) {
     if (ran_omp_color && ran_cuda_color) {
         std::cout << "\n--- Weryfikacja wyników CUDA (Color) ---" << std::endl;
 
-        // Dla uproszczenia: porównujemy histogramy zliczone globalnie (nalezy dopracowac dla kanalow B/G/R)
         auto hist_cuda_R = calculateHistogram(outputImageCUDAColor, DEFAULT_BINS);
         auto hist_omp_color1 = calculateHistogram(outputImageOMPColor, DEFAULT_BINS);
 
@@ -404,9 +388,7 @@ int main(int argc, char** argv) {
     // Zgodnie z zasadą A: skalowalności uruchamiamy gdy mode=="ALL" lub mode=="SCALING" lub gdy powyższe bloki działały i chcemy dodatkowo wykonać skalowalność.
     // W tej wersji: wykonujemy skalowalność jeśli mode == "ALL" lub mode == "SCALING" lub mode zawiera "OMP" -> OMP scaling; "CUDA" -> CUDA scaling.
     // ===================================================================
-    // OMP scaling już wykonane wewnątrz bloku OMP (jeśli ten blok był wykonany) — ale upewnijmy się, że gdy użytkownik wybrał "SCALING" to wykonamy obie skalowalności.
     if (mode == "SCALING" || mode == "ALL") {
-        // OMP skalowalność (jeśli OMP dostępne)
         std::cout << "\n--- Sprawdzenie skalowalności OMP (Grayscale) [tryb SCALING/ALL] ---" << std::endl;
         std::ofstream results_extra("scalability_results.csv");
         results_extra << "threads,time_ms\n";
@@ -441,7 +423,6 @@ int main(int argc, char** argv) {
         }
         results_extra_color.close();
 
-        // CUDA skalowalność
         std::cout << "\n--- Sprawdzenie skalowalności CUDA (Grayscale) [tryb SCALING/ALL] ---" << std::endl;
         std::ofstream results_cuda_gray("scalability_results_cuda_gray.csv");
         results_cuda_gray << "threadsPerBlock,time_ms\n";

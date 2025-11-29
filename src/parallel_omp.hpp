@@ -41,4 +41,4 @@ std::vector<std::vector<int>> calculateHistograms_OMP_Color(const cv::Mat& image
 cv::Mat equalize_OMP_Color(const cv::Mat& inputImage, int num_bins);
 
 
-#endif // PARALLEL_OMP_HPP
+#endif 

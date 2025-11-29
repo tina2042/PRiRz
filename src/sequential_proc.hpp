@@ -60,4 +60,4 @@ cv::Mat equalize_SEQ_Grayscale(const cv::Mat& inputImage, int num_bins);
  */
 cv::Mat equalize_SEQ_Color(const cv::Mat& inputImage, int num_bins);
 
-#endif // SEQUENTIAL_PROC_HPP
+#endif 
