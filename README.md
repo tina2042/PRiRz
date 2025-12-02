@@ -30,8 +30,7 @@ Projekt jest zorganizowany modularnie, aby oddzielić implementacje dla różnyc
 │   ├── input/                # Katalog na obrazy wejściowe
 │   └── output/               # Katalog na obrazy wyjściowe po equalizacji
 ├── reports/
-│   ├── final_report.pdf      # Raport końcowy z analizą
-│   └── charts/               # Wykresy wydajności i jakości
+│   ├── charts and notes      # Katalog na wykresy zapisane i notatki z komendami do uruchomień
 └── README.md
 ```
 ## Zakres Implementacji i Wersje
@@ -75,3 +74,4 @@ Możliwe jest również uruchomienie poprzez interface:
 python interface_script.py 
 ```
 W interface możliwe jest wybranie, które metody mają zostać uruchomione, wybranie pliku do wykonania operacji, wybranie liczby przedziałów, a po wykonaniu obliczeń zapisanie wykresów: porównania czasów wykonania oraz wykresy skalowalności
+
