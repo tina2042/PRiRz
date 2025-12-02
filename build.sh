@@ -79,38 +79,32 @@ fi
 echo ""
 echo "== Python: sprawdzanie =="
 
+# Upewniamy się, że pip jest zainstalowany
+sudo apt update && sudo apt install -y python3-pip
+
 # tkinter
-if ! python3 - <<EOF
-import tkinter
-EOF
-then
-    echo "❗ Brak tkinter → instaluję python3-tk"
+if ! python3 -c "import tkinter" &> /dev/null; then
+    echo "❗ Brak tkinter → instaluję python3-tk (wymagany apt)"
     sudo apt update
     sudo apt install -y python3-tk
 else
     echo "✔ tkinter OK"
 fi
 
-# pandas
-if ! python3 - <<EOF
-import pandas
-EOF
-then
-    echo "❗ Brak pandas → instaluję python3-pandas"
-    sudo apt update
-    sudo apt install -y python3-pandas
+# Sprawdzamy, czy pandas jest dostępny
+if ! python3 -c "import pandas"; then
+    echo "❗ Brak pandas → instaluję przez pip"
+    # Instalacja przez pip dla użytkownika (unika problemów z uprawnieniami systemowymi)
+    pip3 install pandas
 else
     echo "✔ pandas OK"
 fi
 
 # matplotlib
-if ! python3 - <<EOF
-import matplotlib
-EOF
-then
-    echo "❗ Brak matplotlib → instaluję python3-matplotlib"
-    sudo apt update
-    sudo apt install -y python3-matplotlib
+# Używamy flagi -c dla czytelności i przekierowujemy błędy do /dev/null
+if ! python3 -c "import matplotlib" &> /dev/null; then
+    echo "❗ Brak matplotlib → instaluję przez pip"
+    pip3 install matplotlib
 else
     echo "✔ matplotlib OK"
 fi
