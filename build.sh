@@ -73,6 +73,50 @@ else
     echo "✔ NVCC OK (wersja: $(nvcc --version | grep release))"
 fi
 
+# ============================================
+# PYTHON
+# ============================================
+echo ""
+echo "== Python: sprawdzanie =="
+
+# tkinter
+if ! python3 - <<EOF
+import tkinter
+EOF
+then
+    echo "❗ Brak tkinter → instaluję python3-tk"
+    sudo apt update
+    sudo apt install -y python3-tk
+else
+    echo "✔ tkinter OK"
+fi
+
+# pandas
+if ! python3 - <<EOF
+import pandas
+EOF
+then
+    echo "❗ Brak pandas → instaluję python3-pandas"
+    sudo apt update
+    sudo apt install -y python3-pandas
+else
+    echo "✔ pandas OK"
+fi
+
+# matplotlib
+if ! python3 - <<EOF
+import matplotlib
+EOF
+then
+    echo "❗ Brak matplotlib → instaluję python3-matplotlib"
+    sudo apt update
+    sudo apt install -y python3-matplotlib
+else
+    echo "✔ matplotlib OK"
+fi
+
+echo "✔ Pythonowe biblioteki OK"
+
 
 echo "=============================================="
 echo " Kompilacja projektu"
