@@ -51,3 +51,27 @@ Projekt zawiera cztery główne implementacje, które będą mierzone i porówny
         - Histogram: Histogram per blok (każdy blok oblicza swój lokalny histogram w pamięci współdzielonej bloku), a następnie łączenie i sumowanie wyników na GPU.
         - Equalizacja: Wykorzystanie algorytmu Prefix-Sum (scan) do efektywnego obliczenia skumulowanej dystrybuanty (CDF) na GPU.
     - Wersje: Skala szarości oraz kolorowa (równoległe przetwarzanie kanałów).
+
+## Uruchomienie
+Uruchomienie projektu możliwe jest na systemie Linux lub jego dystrubucjach dla innych systemów. W celu kompilacji należy uruchomić:
+```bash
+./build.sh
+```
+To zainstaluje potrzebne pakiety oraz skompiluje cały projekt.
+Aby uruchomić wykonanie operacji sekwencyjnie, MPI i CUDA można skorzystać z skompilowanego programu poprzez:
+```bash
+./hist_eq data/input/bird.bmp ALL 256
+```
+gdzie data/input/bird.bmp to ścieżka do pliku, ALL to wywołanie wszystkich 3 metod (dostępne również ALL, SEQ, OMP, CUDA, SEQ_OMP, SEQ_CUDA, OMP_CUDA, SCALING), a 256 to liczba przedziałów (dostępne 256, 128, 64, 32, 16).
+
+Aby uruchomić wykonanie operacji MPI można skorzystać z skompilowanego programu poprzez:
+```bash
+mpirun -np N ./mpi_runner data/input/bird.bmp MPI_GRAY 256
+```
+gdzie data/input/bird.bmp to ścieżka do pliku, MPI_GRAY to wywołanie metody (dostępne również MPI_GRAY, MPI_COLOR), a 256 to liczba przedziałów (dostępne 256, 128, 64, 32, 16).
+
+Możliwe jest również uruchomienie poprzez interface:
+```bash
+python interface_script.py 
+```
+W interface możliwe jest wybranie, które metody mają zostać uruchomione, wybranie pliku do wykonania operacji, wybranie liczby przedziałów, a po wykonaniu obliczeń zapisanie wykresów: porównania czasów wykonania oraz wykresy skalowalności
