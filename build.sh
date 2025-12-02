@@ -38,6 +38,19 @@ install_if_missing g++ g++
 install_if_missing mpicxx openmpi-bin
 install_if_missing mpirun openmpi-bin
 
+if [ ! -f /usr/include/mpi.h ] && [ ! -f /usr/include/mpi/mpi.h ]; then
+    echo "❗ Brak mpi.h — instaluję libopenmpi-dev"
+    sudo apt update
+    sudo apt install -y libopenmpi-dev
+else
+    echo "✔ Plik mpi.h znaleziony"
+fi
+
+if ! mpicxx -show >/dev/null 2>&1; then
+    echo "❗ mpicxx nie skonfigurowany poprawnie"
+    exit 1
+fi
+
 # -------------------------
 # OpenCV
 # -------------------------
