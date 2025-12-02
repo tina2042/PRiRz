@@ -6,12 +6,60 @@
 set -e
 
 SRC_DIR="./src"
-
 OUTPUT="hist_eq"
-
 OUTPUT_SEQ_OMP_CUDA="hist_eq"
-
 OUTPUT_MPI="mpi_runner"
+
+echo "=============================================="
+echo " Sprawdzanie i instalacja zależności"
+echo "=============================================="
+
+# -----------------------------------------------
+# Funkcja: jeśli komenda nie istnieje → zainstaluj pakiet
+# -----------------------------------------------
+install_if_missing() {
+    CMD=$1
+    PKG=$2
+
+    if ! command -v "$CMD" >/dev/null 2>&1; then
+        echo "❗ Brak: $CMD → instaluję pakiet: $PKG"
+        sudo apt update
+        sudo apt install -y "$PKG"
+    else
+        echo "✔ $CMD OK"
+    fi
+}
+
+# -------------------------
+# Wymagane narzędzia systemowe
+# -------------------------
+install_if_missing pkg-config pkgconf
+install_if_missing g++ g++
+install_if_missing mpicxx openmpi-bin
+install_if_missing mpirun openmpi-bin
+
+# -------------------------
+# OpenCV
+# -------------------------
+if ! pkg-config --exists opencv4; then
+    echo "❗ Brak OpenCV → instaluję..."
+    sudo apt update
+    sudo apt install -y libopencv-dev
+else
+    echo "✔ OpenCV OK (wersja: $(pkg-config --modversion opencv4))"
+fi
+
+# -------------------------
+# CUDA toolkit + NVCC
+# -------------------------
+if ! command -v nvcc >/dev/null 2>&1; then
+    echo "❗ Brak NVCC → instaluję nvidia-cuda-toolkit"
+    sudo apt update
+    sudo apt install -y nvidia-cuda-toolkit
+else
+    echo "✔ NVCC OK (wersja: $(nvcc --version | grep release))"
+fi
+
 
 echo "=============================================="
 echo " Kompilacja projektu"

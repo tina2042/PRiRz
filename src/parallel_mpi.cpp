@@ -1,6 +1,6 @@
 #include "parallel_mpi.hpp"
 #include <mpi.h>
-#include "sequential_proc.hpp" n
+#include "sequential_proc.hpp"
 
 cv::Mat equalize_MPI_Grayscale(const cv::Mat& inputImage, int rank, int size, int num_bins) {
     
