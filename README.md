@@ -7,7 +7,6 @@ Projekt realizuje operację equalizacji histogramu (wyrównywania kontrastu) obr
 - CUDA/OpenCL: Przetwarzanie na jednostce GPU (histogram per blok, prefix-sum).
 - OpenCV: Obsługa i manipulacja obrazami.
 ## Struktura Projektu
-Projekt jest zorganizowany modularnie, aby oddzielić implementacje dla różnych architektur równoległych
 
 Projekt jest zorganizowany modularnie, aby oddzielić implementacje dla różnych architektur równoległych:
 
@@ -74,4 +73,5 @@ Możliwe jest również uruchomienie poprzez interface:
 python interface_script.py 
 ```
 W interface możliwe jest wybranie, które metody mają zostać uruchomione, wybranie pliku do wykonania operacji, wybranie liczby przedziałów, a po wykonaniu obliczeń zapisanie wykresów: porównania czasów wykonania oraz wykresy skalowalności
+
 
